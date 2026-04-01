@@ -64,18 +64,29 @@ HEADERS = {
 
 # --- Selinas Profil für personalisierte Nachrichten ---
 SELINA_PROFIL = """
+═══════════════════════════════════════════════════
 ÜBER SELINA GÄRTNER:
+═══════════════════════════════════════════════════
 KI-Strategieberaterin (TÜV Rheinland zertifiziert) | Kommerzielle Exzellenz & Compliance
 Life Sciences & MedTech | Speakerin | Freiburg, Deutschland
+LinkedIn: https://www.linkedin.com/in/selinagaertner/
+1.562 Follower | 500+ Connections
 
-HINTERGRUND:
-- 7+ Jahre bei HTG Molecular Diagnostics (District Manager → Director EU Medical Affairs & Marketing)
-- Senior Marketing Manager EMEA bei Mission Bio
-- Business Development Consultant bei Novoptim (Life Sciences)
-- MSc Life Science, Universität Konstanz | BSc Molecular Life Science, Universität Lübeck
-- Zertifizierte KI-Strategieberaterin mit TÜV Rheinland-Qualifikation (2026)
-- KI-Mastery Workshop Business Sparring (Körting Institute)
-- Trainerin für AI Design Sprint® (Agent Design Sprint Format)
+BERUFLICHER HINTERGRUND:
+- Selina Gaertner Consulting (seit Feb 2024): Unternehmensberaterin für KI-isierung von Life Science
+- HTG Molecular Diagnostics (7+ Jahre):
+  • District Manager Central Europe (2016-2021): Aufbau des DE/AT/CH Geschäfts von Grund auf
+  • Medical Affairs Manager EMEA (2019-2021)
+  • Director EU Medical Affairs & Marketing (2021-2023): Supervisor 3 MA, CE-IVD Produkte, KOL-Netzwerk
+- Mission Bio: Senior Marketing Manager EMEA (Feb-Okt 2025)
+- Novoptim: Business Development Consultant Life Sciences (2014-2016)
+
+AUSBILDUNG & ZERTIFIZIERUNGEN:
+- MSc Life Science, Universität Konstanz (2010-2013)
+- BSc Molecular Life Science, Universität zu Lübeck (2007-2010)
+- AI Strategy Consultant mit TÜV Rheinland-Qualifikation (März 2026, gültig bis 2029)
+- KI-Mastery Workshop Business Sparring (Körting Institute, Jan 2026)
+- Zertifizierte Trainerin für AI Design Sprint® (Agent Design Sprint Format)
 
 WAS SELINA TUT:
 Hilft kommerziellen Führungskräften in Biotech, MedTech und Life Science Unternehmen,
@@ -85,54 +96,97 @@ KI so in Sales & Marketing bis hin zur gesamten Firmenstruktur zu integrieren, d
 - Die Pipeline stabil messbare Ergebnisse liefert
 Pragmatisch, EU-konform (GDPR, MDR/IVDR, EU AI Act), umsetzbar — keine Theorie.
 
-KONKRETE LEISTUNGEN:
+KONKRETE LEISTUNGEN & SERVICES:
 - KI-gestützte Sales- & Marketing-Strukturen (AI-Agenten, LLM-Systeme, Automatisierungen)
 - Commercial Enablement (Training für Sales, Marketing & Management)
 - GTM-Unterstützung (Workflow-Design, Messaging, Pipeline-Effizienz)
 - EU-konforme Umsetzung entlang GDPR, MDR/IVDR & EU AI Act
 - AI Readiness Assessment & Scorecard
 - Workshops & Agent Design Sprints für Geschäftsführung und Teams
+- Marketing Consulting, Business Consulting, Healthcare Consulting
+- Change Management, Corporate Training, Executive Coaching, Public Speaking
 
-AKTUELLE AKTIVITÄTEN:
-- Speakerin & Workshop-Leiterin beim KI Summit für Pharma & Life Sciences (Berlin, 24.-25. April 2026)
-  Talk: "Warum Technologie allein nicht reicht: Erfolgsfaktoren für KI-Adoption"
-  Workshop: "Deep Research mit KI: von Information zu entscheidungsreifen Insights"
-- Aktiv auf LinkedIn mit Beiträgen zu KI-Strategie, EU AI Act, Commercial Excellence
-- Pro-bono Engagement für Gorilla Nuts (Social Impact Projekt in Rwanda)
+UNIQUE SELLING POINTS (was Selina unterscheidet):
+- Verbindet operative Life-Science-Erfahrung (Medical Affairs, Marketing, Sales)
+  mit KI-Expertise und Commercial Execution
+- Keine Buzzwords, kein Overengineering — funktionierende KI-Prozesse
+- Versteht regulierte Märkte von innen (7 Jahre Diagnostik/IVD)
+- Shadow AI erkennen und in strukturierte Governance überführen
+- Kann sowohl strategisch beraten als auch operativ umsetzen
+
+AKTUELLE AKTIVITÄTEN & EVENTS:
+- Speakerin & Workshop-Leiterin beim KI Summit für Pharma & Life Sciences
+  (Berlin, EUREF-Campus, 24.-25. April 2026)
+  • Talk: "Warum Technologie allein nicht reicht: Erfolgsfaktoren für KI-Adoption"
+  • Workshop: "Deep Research mit KI: von Information zu entscheidungsreifen Insights"
+  • Co-Organisatorin mit Henrike Melmert (Pharma Uno Akademie)
+- Teilnehmerin & Sprinterin beim AI Agent Design Sprint (Axel Beckert, Thomas Brunner)
+- AI Summit Germany: Live-Case-Präsentation zu EU AI Act & High-Risk Klassifikation
+- Aktiv auf LinkedIn: Posts zu KI-Strategie, EU AI Act, Commercial Excellence, Shadow AI
+- Pro-bono: Gorilla Nuts (Schwester's Social Impact Projekt in Rwanda — Macadamia)
+
+SELINAS LINKEDIN-THEMEN (für Matching mit Kontakt-Posts):
+- KI in regulierten Märkten (MedTech, Pharma, Diagnostik)
+- EU AI Act Compliance & GDPR
+- Shadow AI vs. strukturierte KI-Governance
+- AI als Execution Engine (nicht nur Chat-Tool)
+- Commercial Excellence: Sales-Zyklen, CRM, Pipeline-Effizienz
+- Agent-basierte Automatisierung & AI Design Sprints
+- Change Management bei KI-Einführung
+- MDR/IVDR Regulatorik
+- Women in Leadership / Social Impact
+
+SELINAS NETZWERK & GEMEINSAME KONTAKTE (zum Matching):
+- Torsten Koerting, Birgit Koerting (DIE KOERTINGS — Körting Institute)
+- Henrike Melmert (Pharma Uno Akademie, KI Summit Co-Organisatorin)
+- Filip Brocke, Anja Holz, Svetlana Ryzhenko, Helmut Eberz (KI-Strategie Peer Group)
+- Axel Beckert, Thomas Brunner (AI Agent Design Sprint)
+- Dr. Johanna Dahm (Decision Management, Keynote-Sprecherin)
+- Prof. Dr. Sylvia Thun (Charité Berlin, Digitale Medizin)
+- Stefan Dr. Walzer (MArS Market Access)
 
 ZIELGRUPPE:
-CEOs, Geschäftsführer, CCOs, CMOs, Directors und Führungskräfte in Biotech, MedTech
-und Life Science Unternehmen die KI strategisch und gewinnbringend integrieren wollen.
+CEOs, Geschäftsführer, CCOs, CMOs, CTOs, Directors und Führungskräfte in Biotech, MedTech
+und Life Science Unternehmen (primär KMU/SME, 10-500 MA) die KI strategisch integrieren wollen.
 
 KOSTENLOSE EINSTIEGS-ANGEBOTE:
 - AI Readiness Scorecard (5 Min Online-Check): https://ai-readiness-scorecard.onrender.com/scorecard
 - 30-Min Kennenlern-Gespräch: https://calendly.com/gaertner-selina/30min-with-selina-gaertner
 
-THEMEN DIE SELINA BESONDERS INTERESSIEREN:
-- KI-Integration in regulierten Märkten (MDR, IVDR, EU AI Act)
-- Shadow AI vs. strukturierte KI-Governance
-- Kürzere Sales-Zyklen durch KI
-- CRM-Datenqualität & Pipeline-Effizienz
-- Change Management bei KI-Einführung
-- Agent-basierte Automatisierung
-
-NACHRICHTEN-STIL:
-- Kurz, persönlich, auf Augenhöhe (NICHT verkäuferisch)
+═══════════════════════════════════════════════════
+NACHRICHTEN-REGELN:
+═══════════════════════════════════════════════════
+STIL:
+- Kurz, persönlich, auf Augenhöhe (NICHT verkäuferisch, KEIN Pitch)
 - Max 3-4 Sätze für LinkedIn, max 5-6 Sätze für Email
-- Beziehe dich auf 1 konkreten Fakt über die Person
+- Beziehe dich auf genau 1 konkreten, recherchierten Fakt über die Person
+- Zeige echtes Interesse — keine Floskeln wie "ich bin beeindruckt"
 - Stelle eine offene Frage die zum Dialog einlädt
-- Jede Nachricht endet mit einem klaren CTA
-- Kein "Pitch" — echte Neugier und Relevanz
+- Jede Nachricht MUSS mit einem klaren CTA enden
 
-CTA-OPTIONEN (je nach Kontext den passendsten wählen):
-- Scorecard: "Ich habe einen kurzen AI Readiness Check gebaut — wäre das spannend für Sie?"
-- Calendly: "Hätten Sie Lust, sich dazu 30 Min auszutauschen?"
-- Offene Frage: "Wie gehen Sie aktuell mit [konkretes Thema] um?"
-- Event: "Sind Sie beim KI Summit in Berlin dabei?"
+CTA-OPTIONEN (wähle den zum Kontext passendsten):
+1. Scorecard-CTA: "Ich habe einen kurzen AI Readiness Check gebaut — wäre das interessant?"
+   → Wenn: Person hat sich noch nicht mit KI beschäftigt, Firma nutzt keine KI
+2. Calendly-CTA: "Hätten Sie Lust, sich dazu 30 Min auszutauschen?"
+   → Wenn: Person ist bereits KI-affin, konkretes gemeinsames Thema, warmes Intro
+3. Frage-CTA: "Wie gehen Sie aktuell mit [konkretes Thema] um?"
+   → Wenn: Person hat kürzlich etwas Relevantes gepostet/gesagt, Discovery-Modus
+4. Event-CTA: "Sind Sie beim KI Summit in Berlin (24.-25. April) dabei?"
+   → Wenn: Person geht auf Konferenzen, ist in der DACH-Biotech/Pharma Szene
+5. Inhalt-CTA: "Ich habe dazu einen Artikel/Post geschrieben — soll ich ihn teilen?"
+   → Wenn: Person postet viel auf LinkedIn, Content-orientiert
 
 SIGNATUR:
 - Deutsch: "Herzliche Grüße, Selina"
 - Englisch: "Best wishes, Selina"
+
+ANTI-PATTERNS (NIEMALS in der Nachricht):
+- "Ich bin beeindruckt von..." (klingt unecht)
+- "Ich würde mich freuen..." (zu passiv)
+- Aufzählung von Selinas eigenen Leistungen
+- Links in der ersten Nachricht (Scorecard/Calendly)
+- Mehr als 1 Frage stellen
+- Englisch schreiben wenn Person in DACH sitzt (und umgekehrt)
 """
 
 
@@ -953,7 +1007,7 @@ class EnrichmentEngine:
                 all_texts.append(f"[Podcast/Video] {t}: {b}\n  URL: {url}")
 
         if max_searches >= 5:
-            print(f"  [5/6] News...")
+            print(f"  [5/6] News & LinkedIn...")
             for r in self._search(f'"{clean_name}" {company} news 2025 2026'.strip(), max_results=5):
                 url, t, b = r.get("href",""), r.get("title",""), r.get("body","")
                 if self._is_about_person(f"{t} {b}", name, company):
@@ -963,13 +1017,30 @@ class EnrichmentEngine:
                         other_facts.append(f"{t} → {url}")
                 all_texts.append(f"[News] {t}: {b}\n  URL: {url}")
 
+            # LinkedIn-Posts der Person
+            for r in self._search(f'site:linkedin.com/posts "{clean_name}" OR site:linkedin.com/pulse "{clean_name}"', max_results=5):
+                url, t, b = r.get("href",""), r.get("title",""), r.get("body","")
+                linkedin_facts.append(f"{t} → {url}")
+                all_texts.append(f"[LinkedIn-Post] {t}: {b}\n  URL: {url}")
+
         if max_searches >= 6:
-            print(f"  [6/6] Karriere...")
+            print(f"  [6/6] Karriere & KI-Bezug...")
             for r in self._search(f'"{clean_name}" CEO career biography Lebenslauf', max_results=5):
                 url, t, b = r.get("href",""), r.get("title",""), r.get("body","")
                 if self._is_about_person(f"{t} {b}", name, company):
                     career_facts.append(f"{t} → {url}")
                 all_texts.append(f"[Karriere] {t}: {b}\n  URL: {url}")
+
+            # KI/Digitalisierungs-Bezug der Firma
+            if company:
+                for r in self._search(f'"{company}" AI artificial intelligence KI digital', max_results=5):
+                    url, t, b = r.get("href",""), r.get("title",""), r.get("body","")
+                    all_texts.append(f"[KI-Bezug Firma] {t}: {b}\n  URL: {url}")
+
+                # Stellenausschreibungen (Wachstumssignal)
+                for r in self._search(f'"{company}" hiring jobs stellenanzeige careers', max_results=3):
+                    url, t, b = r.get("href",""), r.get("title",""), r.get("body","")
+                    all_texts.append(f"[Stellenanzeigen] {t}: {b}\n  URL: {url}")
 
         # ==============================================================
         # ERGEBNISSE (vor Claude-Analyse zusammenstellen)
@@ -1077,90 +1148,122 @@ ALLE RECHERCHE-ERGEBNISSE:
 {search_results[:15000]}
 
 ═══════════════════════════════════════════════════
-DEINE AUFGABEN — DEEP RESEARCH DOSSIER:
+DEEP RESEARCH DOSSIER — AUFGABEN:
 ═══════════════════════════════════════════════════
 
-1. **ZUSAMMENFASSUNG** (vollständiges Dossier für Selina):
-   Erstelle eine strukturierte Analyse mit ALLEN relevanten Fakten.
-   Gehe systematisch diese Kategorien durch:
+1. **VOLLSTÄNDIGES DOSSIER** (für Selina als Vorbereitung):
+   Gehe JEDE Kategorie systematisch durch. Nutze NUR echte Fakten mit Quellenlinks.
+   Wenn du zu einer Kategorie nichts findest → "Keine Daten gefunden."
 
    A) PERSON & ROLLE:
-      - Wer ist diese Person? Aktueller Titel, Firma, Verantwortungsbereich
-      - Karriereweg: Vorherige Positionen, Werdegang, Ausbildung
-      - Expertise-Gebiete, Spezialisierungen
+      - Aktueller Titel, Firma, Verantwortungsbereich, Teamgröße
+      - Karriereweg: Alle vorherigen Positionen, Werdegang (Aufstieg? Branchenwechsel?)
+      - Ausbildung (Uni, Abschluss, Promotion?)
+      - Expertise-Gebiete, Spezialisierungen, Fachgebiete
+      - Awards, Auszeichnungen, Advisory Board Positionen
 
-   B) FIRMA:
-      - Was macht die Firma genau? Produkte/Services, Branche
-      - Firmengröße, Standort, Marktposition
-      - Aktuelle Entwicklungen (Funding, Partnerschaften, Produktlaunches, M&A)
-      - Stellenausschreibungen (Hinweis auf Wachstum/neue Richtungen?)
+   B) FIRMA & MARKT:
+      - Was macht die Firma genau? Kernprodukte/Services, Technologie-Plattform
+      - Branche, Indikationsgebiete, Therapiefelder
+      - Firmengröße (Mitarbeiter, Umsatz falls bekannt), Standorte
+      - Marktposition, Wettbewerber, Alleinstellungsmerkmal
+      - Funding-Runden, Investoren (bei Startups)
+      - Aktuelle Entwicklungen: Partnerschaften, Produktlaunches, M&A, klinische Studien
+      - Stellenausschreibungen (Hinweis auf Wachstum? Suchen sie KI/Digital-Experten?)
 
-   C) DIGITALISIERUNG & KI-BEZUG:
-      - Nutzt die Person/Firma bereits KI? Welche Tools/Ansätze?
-      - Hat die Person sich öffentlich zu KI geäußert (Posts, Interviews)?
-      - Gibt es regulatorische Herausforderungen (MDR, IVDR, EU AI Act)?
-      - Digitalisierungsprojekte oder Automatisierungsinitiativen?
+   C) KI & DIGITALISIERUNG (KERNKATEGORIE für Selina):
+      - Nutzt die Person/Firma bereits KI? Welche Tools, Plattformen, Ansätze?
+      - Hat die Person sich öffentlich zu KI/AI geäußert? (LinkedIn-Posts, Interviews, Panels)
+      - Gibt es ein Digitalisierungsprojekt, einen CDO/CTO, eine Digital-Strategie?
+      - Regulatorische Situation: MDR, IVDR, EU AI Act — betroffen? Vorbereitet?
+      - "Shadow AI" Risiko: Nutzen Teams unkontrolliert ChatGPT o.ä.?
+      - KI in Sales/Marketing/Medical Affairs — gibt es Ansätze?
+      - Automatisierung: CRM, Pipeline, Forecasting — manuell oder digital?
+      - Arbeitet die Firma bereits mit einem KI-Berater? (Wettbewerber von Selina?)
 
-   D) ÖFFENTLICHE AUFTRITTE:
-      - Konferenzen/Kongresse (vergangenes Jahr + bevorstehende)
-      - Podcasts, Videos, Webinare, Interviews
-      - Publikationen, Studien, Patente
-      - LinkedIn-Beiträge (Themen, Häufigkeit, Engagement)
+   D) ÖFFENTLICHE AUFTRITTE & CONTENT:
+      - Konferenzen VERGANGENES JAHR (2025): Welche? Als Speaker oder Teilnehmer?
+      - Konferenzen BEVORSTEHEND (2026): Geplante Auftritte, registriert?
+      - Podcasts: Gast in Podcasts? Eigener Podcast?
+      - Videos: YouTube, LinkedIn-Videos, Webinar-Auftritte
+      - Publikationen: Papers, Artikel, Patente, Bücher
+      - LinkedIn-Aktivität: Wie oft postet die Person? Welche Themen? Engagement?
+      - Andere Social Media: Twitter/X, Blogs, Newsletter?
 
-   E) PERSÖNLICHES:
-      - Geburtstag (falls öffentlich verfügbar)
-      - Persönliche Interessen, Ehrenämter, Nebenprojekte
-      - Gemeinsame Kontakte oder Themen mit Selina
+   E) PERSÖNLICHES & SOFT FACTS:
+      - Geburtstag (falls öffentlich auf LinkedIn/XING)
+      - Persönliche Interessen, Hobbies (aus Posts/Interviews ableitbar?)
+      - Ehrenämter, Vereinsmitgliedschaften, Stiftungen, Beiräte
+      - Alma Mater — gleiche Uni wie Selina (Konstanz, Lübeck)?
+      - Gemeinsame LinkedIn-Kontakte mit Selina (aus dem Netzwerk-Abgleich oben)
+      - Sprache: Kommuniziert die Person auf Deutsch oder Englisch?
+      - Familienstand, Kinder (nur wenn öffentlich und relevant, z.B. "Familienmensch")
 
-   F) ANKNÜPFUNGSPUNKTE FÜR SELINA:
-      - Die 3 stärksten Anknüpfungspunkte für eine Kontaktaufnahme
-      - Konkrete Schmerzpunkte die Selina lösen könnte
-      - Timing-Signale (Jobwechsel, neues Projekt, Event, Stellenanzeige)
+   F) STRATEGISCHE ANALYSE FÜR SELINA:
+      - Die 3 STÄRKSTEN Anknüpfungspunkte (priorisiert nach Relevanz):
+        Warum genau DIESER Kontakt für Selina spannend ist
+      - Konkrete Schmerzpunkte die Selina lösen könnte:
+        • Lange Sales-Zyklen? Ineffiziente Prozesse? Unsichere Forecasts?
+        • Fehlende KI-Strategie? Compliance-Risiken? Shadow AI?
+        • Team-Überlastung? Manuelle CRM-Pflege? Pipeline-Probleme?
+      - Timing-Signale (JETZT ist ein guter Zeitpunkt weil...):
+        • Kürzlicher Jobwechsel (neue Besen kehren gut — offen für neue Ansätze)
+        • Neues Funding (Budget für Beratung vorhanden)
+        • Stellenanzeige für Digital/KI-Rolle (Thema ist auf der Agenda)
+        • Konferenz-Teilnahme (Person ist gerade im "Lern-Modus")
+        • Regulatorische Deadline (EU AI Act, MDR-Übergang)
+      - Risiken/Hindernisse:
+        • Hat die Firma bereits einen KI-Berater?
+        • Ist die Person bekannt als "KI-Skeptiker"?
+        • Zu kleines Unternehmen für Beratungsprojekt?
 
-   WICHTIG: Nur ECHTE FAKTEN mit Quellenlinks verwenden. Nichts erfinden!
-   Wenn du zu einer Kategorie nichts findest, schreibe "Keine Daten gefunden."
+   G) GESPRÄCHS-VORBEREITUNG (falls es zum Call kommt):
+      - 3 gute Gesprächseinstiegsfragen
+      - 2 Themen die Selina VERMEIDEN sollte
+      - Tonalität-Empfehlung (formell/informell, Du/Sie)
 
-2. **PERSONALISIERTE NACHRICHT** (fertig zum Absenden):
-   Schreibe eine KURZE Nachricht die Selina direkt senden kann.
+2. **PERSONALISIERTE NACHRICHT** (fertig zum Kopieren & Absenden):
+   Schreibe eine KURZE Nachricht. Selina soll sie 1:1 senden können.
 
    REGELN:
    - Sprache: {sprache}
-   - KURZ: Max 3-4 Sätze für LinkedIn, max 5-6 Sätze für Email
+   - KURZ: Max 3-4 Sätze für LinkedIn / max 5-6 Sätze für Email
    - Beziehe dich auf genau 1 konkreten, recherchierten Fakt
-   - Natürlich und auf Augenhöhe — kein Pitch, keine Floskeln
-   - IMMER mit einem klaren CTA enden (wähle den passendsten):
-     • Scorecard-CTA: "Ich habe einen kurzen AI Readiness Check gebaut — wäre das interessant?"
-     • Calendly-CTA: "Hätten Sie Lust, sich dazu 30 Min auszutauschen?"
-     • Frage-CTA: "Wie gehen Sie aktuell mit [konkretes Thema] um?"
-     • Event-CTA: "Sind Sie beim KI Summit in Berlin (24.-25. April) dabei?"
-   - Wähle den CTA der am besten zum recherchierten Kontext passt
+   - Natürlich, auf Augenhöhe — kein Pitch, keine Floskeln
+   - KEIN "Ich bin beeindruckt" oder "Ich würde mich freuen"
+   - KEINE Links (Scorecard/Calendly) in der ersten Nachricht
+   - IMMER mit einem klaren CTA enden (siehe CTA-Optionen oben)
    - Signatur: {"Herzliche Grüße, Selina" if sprache == "Deutsch" else "Best wishes, Selina"}
 
-3. **KANAL-EMPFEHLUNG**:
-   - "EMAIL" wenn: verifizierte Email vorhanden UND Person postet wenig auf LinkedIn
-   - "LINKEDIN" wenn: keine/unsichere Email, Person aktiv auf LinkedIn, oder kein Connection
-   - Begründe kurz.
+3. **KANAL-EMPFEHLUNG** (EMAIL oder LINKEDIN):
+   - "EMAIL" wenn: verifizierte Email, Person postet wenig auf LinkedIn, B2B-Berater/CEO
+   - "LINKEDIN" wenn: keine/unsichere Email, Person aktiv auf LinkedIn, noch keine Connection
+   - Begründe in 1 Satz.
 
 4. **MONITORING-TAGS** (für wöchentliche Delta-Scans):
-   Liste die wichtigsten Suchbegriffe auf, mit denen man wöchentlich nach Updates suchen sollte:
-   - z.B. Firmenname + "new", Personenname + "conference 2026", Firma + "hiring"
-   - Diese Tags werden beim nächsten Scan verwendet um NUR NEUE Infos zu finden.
+   Erstelle 8-10 spezifische Suchbegriffe für den wöchentlichen Scan:
+   - "[Firmenname]" + news/partnership/funding/hiring
+   - "[Personenname]" + conference/speaker/podcast/interview 2026
+   - "[Firmenname]" + AI/KI/digital/automation
+   - "[Firmenname]" + EU AI Act/MDR/IVDR/compliance
+   - "[Personenname]" + LinkedIn (für neue Posts)
+   Diese Tags werden beim nächsten Scan verwendet um NUR NEUE Infos zu finden.
 
 Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
 {{
-  "zusammenfassung": "Vollständiges Dossier mit allen Kategorien A-F...",
+  "zusammenfassung": "Vollständiges Dossier mit allen Kategorien A-G...",
   "personalisierte_nachricht": "Kurze, fertige Nachricht (3-4 Sätze + CTA + Signatur)...",
   "nachricht_betreff": "Betreff-Zeile falls Email empfohlen (sonst leer)",
   "kanal_empfehlung": "EMAIL oder LINKEDIN",
   "kanal_begruendung": "Kurze Begründung...",
   "anknuepfungspunkte": "Top 3 Anknüpfungspunkte als Stichpunkte...",
-  "monitoring_tags": ["suchbegriff1", "suchbegriff2", "suchbegriff3", "suchbegriff4", "suchbegriff5"]
+  "monitoring_tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"]
 }}"""
 
-            print(f"  [LLM] Analysiere Fundstücke mit Claude...")
+            print(f"  [LLM] Erstelle Deep Research Dossier mit Claude...")
             msg = client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=4096,
+                max_tokens=6000,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = msg.content[0].text.strip()
