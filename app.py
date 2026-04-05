@@ -284,12 +284,12 @@ st.sidebar.title("⚙️ Einstellungen")
 llm_choice = st.sidebar.radio(
     "🤖 KI-Modell",
     [
-        "🚀 Gemini 2.5 Flash (schnell & günstig)",
-        "🔬 Perplexity Deep Research (tiefste Recherche)",
+        "🚀 Gemini 2.5 Flash — ~0,02 € / Kontakt",
+        "🔬 Perplexity Deep Research — ~2–4 € / Kontakt",
     ],
     help=(
-        "Gemini: ~5-10 Sek/Kontakt, sehr günstig, beste DACH-Abdeckung via Google Search.\n\n"
-        "Perplexity: 30-90 Sek/Kontakt, 30+ Suchläufe automatisch, tiefste Dossiers."
+        "Gemini 2.5 Flash: 5–10 Sek/Kontakt, beste DACH-Abdeckung via Google Search.\n\n"
+        "Perplexity Deep Research: 30–90 Sek/Kontakt, 30+ Suchläufe, tiefste Dossiers."
     ),
 )
 llm_provider = "gemini" if "Gemini" in llm_choice else "perplexity"
