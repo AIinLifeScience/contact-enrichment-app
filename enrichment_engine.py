@@ -1064,7 +1064,7 @@ class EnrichmentEngine:
         # CLAUDE-ANALYSE: Zusammenfassung + Nachricht + Kanal-Empfehlung
         # ==============================================================
         if self.api_key and all_texts:
-            claude = self._analyze_with_claude(
+            claude = self._analyze_with_perplexity(
                 name=name,
                 company=company,
                 title=title,
@@ -1103,16 +1103,17 @@ class EnrichmentEngine:
     # CLAUDE-ANALYSE: Verdaute Zusammenfassung + Personalisierte Nachricht
     # ==================================================================
 
-    def _analyze_with_claude(self, name, company, title, location, search_results, findings):
+    def _analyze_with_perplexity(self, name, company, title, location, search_results, findings):
         """
-        LLM-Analyse: Alle Fundstücke werden mit Selinas Profil abgeglichen.
+        LLM-Analyse via Perplexity (sonar-pro): Alle Fundstücke werden mit Selinas Profil abgeglichen.
+        Perplexity sucht zusätzlich selbst im Web – aktuelle Infos inklusive.
         Liefert: Zusammenfassung, personalisierte Nachricht, Kanal-Empfehlung.
         """
         if not self.api_key:
             return {}
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=self.api_key)
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key, base_url="https://api.perplexity.ai")
 
             # Sprache aus Location/Suche ableiten
             german_indicators = ["deutsch", "dach", "germany", "austria", "swiss",
@@ -1260,13 +1261,13 @@ Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
   "monitoring_tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"]
 }}"""
 
-            print(f"  [LLM] Erstelle Deep Research Dossier mit Claude...")
-            msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
+            print(f"  [LLM] Erstelle Deep Research Dossier mit Perplexity (sonar-pro)...")
+            msg = client.chat.completions.create(
+                model="sonar-pro",
                 max_tokens=6000,
                 messages=[{"role": "user", "content": prompt}],
             )
-            text = msg.content[0].text.strip()
+            text = msg.choices[0].message.content.strip()
 
             # JSON extrahieren
             if "```" in text:
@@ -1284,7 +1285,7 @@ Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
             print(f"  [LLM] Rohtext: {text[:200]}...")
             return {}
         except Exception as e:
-            print(f"  [LLM] Claude-Fehler: {e}")
+            print(f"  [LLM] Perplexity-Fehler: {e}")
             return {}
 
     # ==================================================================
@@ -1334,13 +1335,13 @@ Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
             print(f"  [DELTA] Keine neuen Ergebnisse gefunden.")
             return {"has_updates": False, "neue_infos": "", "follow_up_nachricht": ""}
 
-        # Delta-Analyse mit Claude
+        # Delta-Analyse mit Perplexity
         if not self.api_key:
             return {"has_updates": False}
 
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=self.api_key)
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key, base_url="https://api.perplexity.ai")
 
             # Sprache ableiten
             german_indicators = ["deutsch", "dach", "germany", "austria", "swiss",
@@ -1402,13 +1403,13 @@ Antworte im JSON-Format (ohne Markdown-Codeblock):
   "monitoring_tags": ["aktualisierte", "suchbegriffe", "für", "nächsten", "scan"]
 }}"""
 
-            print(f"  [DELTA-LLM] Analysiere neue Fundstücke...")
-            msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
+            print(f"  [DELTA-LLM] Analysiere neue Fundstücke mit Perplexity...")
+            msg = client.chat.completions.create(
+                model="sonar-pro",
                 max_tokens=2000,
                 messages=[{"role": "user", "content": delta_prompt}],
             )
-            text = msg.content[0].text.strip()
+            text = msg.choices[0].message.content.strip()
 
             if "```" in text:
                 text = text.split("```")[1]

@@ -16,6 +16,16 @@ from pathlib import Path
 
 from enrichment_engine import EnrichmentEngine
 
+# --- .env Datei laden (lokale API Keys) ---
+def _load_env():
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                key, _, val = line.partition("=")
+                os.environ.setdefault(key.strip(), val.strip())
+_load_env()
+
 # --- Page Config ---
 st.set_page_config(
     page_title="Contact Enrichment Tool",
@@ -24,8 +34,8 @@ st.set_page_config(
 )
 
 # --- Constants ---
-DEFAULT_EXCEL = ""
-DEFAULT_OUTPUT_DIR = ""
+DEFAULT_EXCEL = "/Users/selina/Documents/AI Products I build/selina-ai-leadgen/kontakte.xlsx"
+DEFAULT_OUTPUT_DIR = "/Users/selina/Documents/AI Products I build/selina-ai-leadgen"
 
 NEW_COLUMNS = [
     "E-Mail",
@@ -272,15 +282,17 @@ st.markdown("Lädt die Kontaktliste und reichert **automatisch alle Kontakte** a
 st.sidebar.title("⚙️ Einstellungen")
 
 api_key = st.sidebar.text_input(
-    "Anthropic API Key (empfohlen)",
+    "Perplexity API Key (empfohlen)",
+    value=os.environ.get("PERPLEXITY_API_KEY", ""),
     type="password",
-    help="Mit API Key: KI erstellt personalisierte Nachrichten + Zusammenfassung + Kanal-Empfehlung. Ohne: nur Rohdaten.",
+    help="Mit API Key: KI erstellt personalisierte Nachrichten + Zusammenfassung + Kanal-Empfehlung. Perplexity sucht zusätzlich live im Web. Ohne: nur Rohdaten.",
 )
 if not api_key:
     st.sidebar.warning("Ohne API Key: Keine KI-Zusammenfassung und keine personalisierten Nachrichten.")
 
 hunter_api_key = st.sidebar.text_input(
     "Hunter.io API Key (optional)",
+    value=os.environ.get("HUNTER_API_KEY", ""),
     type="password",
     help="Free Tier: 25 Suchen/Monat. Findet Email-Formate von Firmen. https://hunter.io",
 )
