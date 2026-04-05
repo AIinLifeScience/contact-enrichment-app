@@ -281,12 +281,34 @@ st.markdown("Lädt die Kontaktliste und reichert **automatisch alle Kontakte** a
 # --- Sidebar ---
 st.sidebar.title("⚙️ Einstellungen")
 
-api_key = st.sidebar.text_input(
-    "Perplexity API Key (empfohlen)",
-    value=os.environ.get("PERPLEXITY_API_KEY", ""),
-    type="password",
-    help="Mit API Key: KI erstellt personalisierte Nachrichten + Zusammenfassung + Kanal-Empfehlung. Perplexity sucht zusätzlich live im Web. Ohne: nur Rohdaten.",
+llm_choice = st.sidebar.radio(
+    "🤖 KI-Modell",
+    [
+        "🚀 Gemini 2.5 Flash (schnell & günstig)",
+        "🔬 Perplexity Deep Research (tiefste Recherche)",
+    ],
+    help=(
+        "Gemini: ~5-10 Sek/Kontakt, sehr günstig, beste DACH-Abdeckung via Google Search.\n\n"
+        "Perplexity: 30-90 Sek/Kontakt, 30+ Suchläufe automatisch, tiefste Dossiers."
+    ),
 )
+llm_provider = "gemini" if "Gemini" in llm_choice else "perplexity"
+
+if llm_provider == "gemini":
+    api_key = st.sidebar.text_input(
+        "Google Gemini API Key",
+        value=os.environ.get("GEMINI_API_KEY", ""),
+        type="password",
+        help="Kostenlos via Google AI Studio (aistudio.google.com). Sehr günstiges Paid-Tier.",
+    )
+else:
+    api_key = st.sidebar.text_input(
+        "Perplexity API Key",
+        value=os.environ.get("PERPLEXITY_API_KEY", ""),
+        type="password",
+        help="Via perplexity.ai → API → API Keys.",
+    )
+
 if not api_key:
     st.sidebar.warning("Ohne API Key: Keine KI-Zusammenfassung und keine personalisierten Nachrichten.")
 
@@ -383,6 +405,7 @@ if uploaded_df is not None:
         engine = EnrichmentEngine(
             api_key=api_key if api_key else None,
             hunter_api_key=hunter_api_key if hunter_api_key else None,
+            llm_provider=llm_provider,
         )
 
         progress_bar = st.progress(0)

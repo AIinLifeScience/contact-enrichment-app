@@ -193,10 +193,52 @@ ANTI-PATTERNS (NIEMALS in der Nachricht):
 class EnrichmentEngine:
     """Engine v4: 5 Email-Strategien + SMTP-Verifizierung."""
 
-    def __init__(self, api_key: Optional[str] = None, hunter_api_key: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        hunter_api_key: Optional[str] = None,
+        llm_provider: str = "gemini",
+    ):
         self.api_key = api_key
         self.hunter_api_key = hunter_api_key
+        self.llm_provider = llm_provider  # "gemini" oder "perplexity"
         self.ddgs = DDGS()
+
+    # ==================================================================
+    # LLM HELPER: Gemini & Perplexity
+    # ==================================================================
+
+    def _call_gemini(self, prompt: str, max_tokens: int = 6000) -> str:
+        """Gemini 2.5 Flash mit Google Search Grounding."""
+        from google import genai
+        from google.genai import types
+
+        provider_label = "Gemini 2.5 Flash + Google Grounding"
+        print(f"  [LLM] Analysiere mit {provider_label}...")
+
+        client = genai.Client(api_key=self.api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-preview-05-20",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                max_output_tokens=max_tokens,
+            ),
+        )
+        return response.text.strip()
+
+    def _call_perplexity(self, prompt: str, max_tokens: int = 6000) -> str:
+        """Perplexity sonar-deep-research – 30+ Suchläufe, tiefste Recherche."""
+        from openai import OpenAI
+
+        print(f"  [LLM] Analysiere mit Perplexity sonar-deep-research (dauert 30-90 Sek.)...")
+        client = OpenAI(api_key=self.api_key, base_url="https://api.perplexity.ai")
+        msg = client.chat.completions.create(
+            model="sonar-deep-research",
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.choices[0].message.content.strip()
 
     # ==================================================================
     # WEB-SUCHE
@@ -1064,7 +1106,7 @@ class EnrichmentEngine:
         # CLAUDE-ANALYSE: Zusammenfassung + Nachricht + Kanal-Empfehlung
         # ==============================================================
         if self.api_key and all_texts:
-            claude = self._analyze_with_perplexity(
+            claude = self._analyze_with_llm(
                 name=name,
                 company=company,
                 title=title,
@@ -1103,17 +1145,16 @@ class EnrichmentEngine:
     # CLAUDE-ANALYSE: Verdaute Zusammenfassung + Personalisierte Nachricht
     # ==================================================================
 
-    def _analyze_with_perplexity(self, name, company, title, location, search_results, findings):
+    def _analyze_with_llm(self, name, company, title, location, search_results, findings):
         """
-        LLM-Analyse via Perplexity (sonar-pro): Alle Fundstücke werden mit Selinas Profil abgeglichen.
-        Perplexity sucht zusätzlich selbst im Web – aktuelle Infos inklusive.
-        Liefert: Zusammenfassung, personalisierte Nachricht, Kanal-Empfehlung.
+        LLM-Analyse: Alle Fundstücke werden mit Selinas Profil abgeglichen.
+        Unterstützt zwei Provider:
+        - "gemini"     → Gemini 2.5 Flash + Google Search Grounding (schnell, günstig, top DACH-Abdeckung)
+        - "perplexity" → Perplexity sonar-deep-research (30+ Suchläufe, tiefste Recherche)
         """
         if not self.api_key:
             return {}
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=self.api_key, base_url="https://api.perplexity.ai")
 
             # Sprache aus Location/Suche ableiten
             german_indicators = ["deutsch", "dach", "germany", "austria", "swiss",
@@ -1261,13 +1302,10 @@ Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
   "monitoring_tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"]
 }}"""
 
-            print(f"  [LLM] Erstelle Deep Research Dossier mit Perplexity (sonar-pro)...")
-            msg = client.chat.completions.create(
-                model="sonar-pro",
-                max_tokens=6000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = msg.choices[0].message.content.strip()
+            if self.llm_provider == "gemini":
+                text = self._call_gemini(prompt, max_tokens=6000)
+            else:
+                text = self._call_perplexity(prompt, max_tokens=6000)
 
             # JSON extrahieren
             if "```" in text:
@@ -1335,13 +1373,11 @@ Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
             print(f"  [DELTA] Keine neuen Ergebnisse gefunden.")
             return {"has_updates": False, "neue_infos": "", "follow_up_nachricht": ""}
 
-        # Delta-Analyse mit Perplexity
+        # Delta-Analyse mit LLM
         if not self.api_key:
             return {"has_updates": False}
 
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=self.api_key, base_url="https://api.perplexity.ai")
 
             # Sprache ableiten
             german_indicators = ["deutsch", "dach", "germany", "austria", "swiss",
@@ -1403,13 +1439,12 @@ Antworte im JSON-Format (ohne Markdown-Codeblock):
   "monitoring_tags": ["aktualisierte", "suchbegriffe", "für", "nächsten", "scan"]
 }}"""
 
-            print(f"  [DELTA-LLM] Analysiere neue Fundstücke mit Perplexity...")
-            msg = client.chat.completions.create(
-                model="sonar-pro",
-                max_tokens=2000,
-                messages=[{"role": "user", "content": delta_prompt}],
-            )
-            text = msg.choices[0].message.content.strip()
+            provider_label = "Gemini 2.5 Flash" if self.llm_provider == "gemini" else "Perplexity Deep Research"
+            print(f"  [DELTA-LLM] Analysiere neue Fundstücke mit {provider_label}...")
+            if self.llm_provider == "gemini":
+                text = self._call_gemini(delta_prompt, max_tokens=2000)
+            else:
+                text = self._call_perplexity(delta_prompt, max_tokens=2000)
 
             if "```" in text:
                 text = text.split("```")[1]
