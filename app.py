@@ -93,8 +93,8 @@ def is_already_enriched(row):
     return False
 
 
-def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status_container):
-    """Geht ALLE Kontakte durch und reichert sie an."""
+def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status_container, selected_indices=None):
+    """Reichert ausgewählte Kontakte an. selected_indices = Liste der Zeilen-Indizes."""
     name_col = find_column(df, NAME_COLS)
     firma_col = find_column(df, FIRMA_COLS)
     titel_col = find_column(df, TITEL_COLS)
@@ -105,11 +105,13 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
         return {}
 
     results = {}
-    total = len(df)
+    # Nur ausgewählte Zeilen; wenn nichts übergeben → alle
+    rows_to_process = [(i, df.iloc[i]) for i in (selected_indices if selected_indices is not None else range(len(df)))]
+    total = len(rows_to_process)
     skipped = 0
     errors = 0
 
-    for idx, row in df.iterrows():
+    for step, (idx, row) in enumerate(rows_to_process):
         name = get_cell_value(row, name_col)
         firma = get_cell_value(row, firma_col)
         titel = get_cell_value(row, titel_col)
@@ -117,19 +119,19 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
 
         if not name:
             skipped += 1
-            progress_bar.progress((idx + 1) / total)
+            progress_bar.progress((step + 1) / total)
             continue
 
         # Skip already enriched contacts
         if skip_enriched and is_already_enriched(row):
             skipped += 1
             with status_container:
-                st.markdown(f"⏭️ **{idx+1}/{total}:** {name} — bereits angereichert, übersprungen")
-            progress_bar.progress((idx + 1) / total)
+                st.markdown(f"⏭️ **{step+1}/{total}:** {name} — bereits angereichert, übersprungen")
+            progress_bar.progress((step + 1) / total)
             continue
 
         with status_container:
-            st.markdown(f"🔍 **{idx+1}/{total}:** Recherchiere **{name}** ({firma})...")
+            st.markdown(f"🔍 **{step+1}/{total}:** Recherchiere **{name}** ({firma})...")
 
         try:
             result = engine.enrich_contact(
@@ -141,7 +143,6 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
             )
             results[idx] = result
 
-            # Kurze Zusammenfassung anzeigen
             email_info = result.get("email", "-") or "-"
             phone_info = result.get("personal_phone", "-") or "-"
             with status_container:
@@ -158,7 +159,7 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
             with status_container:
                 st.markdown(f"❌ **{name}** — Fehler: {e}")
 
-        progress_bar.progress((idx + 1) / total)
+        progress_bar.progress((step + 1) / total)
 
     return results, skipped, errors
 
@@ -372,36 +373,83 @@ if uploaded_df is not None:
     # Kontakt-Übersicht
     name_col = find_column(df, NAME_COLS)
     firma_col = find_column(df, FIRMA_COLS)
+    titel_col = find_column(df, TITEL_COLS)
 
     already_enriched = sum(1 for _, row in df.iterrows() if is_already_enriched(row))
-    to_enrich = len(df) - already_enriched if skip_enriched else len(df)
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     col1.metric("Kontakte gesamt", len(df))
     col2.metric("Bereits angereichert", already_enriched)
-    col3.metric("Noch zu enrichen", to_enrich)
 
-    # Vorschau
-    with st.expander("📋 Kontaktliste Vorschau", expanded=False):
-        display_cols = [c for c in [name_col, firma_col, "Status", "Firma Stadt"] if c and c in df.columns]
-        if display_cols:
-            st.dataframe(df[display_cols], use_container_width=True)
-        else:
-            st.dataframe(df, use_container_width=True)
+    # --- Interaktive Auswahl-Tabelle ---
+    st.markdown("### ✅ Kontakte auswählen")
+    st.caption("Alle Kontakte sind vorausgewählt. Haken entfernen = wird nicht angereichert.")
+
+    # Auswahl-Buttons
+    btn_col1, btn_col2 = st.columns([1, 1])
+    select_all = btn_col1.button("Alle auswählen", use_container_width=True)
+    deselect_all = btn_col2.button("Alle abwählen", use_container_width=True)
+
+    # Session State für Auswahl initialisieren
+    if "contact_selection" not in st.session_state or len(st.session_state.contact_selection) != len(df):
+        st.session_state.contact_selection = [True] * len(df)
+    if select_all:
+        st.session_state.contact_selection = [True] * len(df)
+    if deselect_all:
+        st.session_state.contact_selection = [False] * len(df)
+
+    # Tabelle mit Checkboxen aufbauen
+    show_cols = {}
+    show_cols["Auswählen"] = st.session_state.contact_selection.copy()
+    if name_col:
+        show_cols["Name"] = [str(df.iloc[i][name_col]) if name_col in df.columns else "" for i in range(len(df))]
+    if firma_col:
+        show_cols["Firma"] = [str(df.iloc[i][firma_col]) if firma_col in df.columns else "" for i in range(len(df))]
+    if titel_col:
+        show_cols["Titel"] = [str(df.iloc[i][titel_col]) if titel_col in df.columns else "" for i in range(len(df))]
+    # Status-Spalte falls vorhanden
+    if "Status" in df.columns:
+        show_cols["Status"] = [str(df.iloc[i]["Status"]) for i in range(len(df))]
+    # Bereits angereichert markieren
+    show_cols["Angereichert"] = ["✅" if is_already_enriched(df.iloc[i]) else "" for i in range(len(df))]
+
+    selection_df = pd.DataFrame(show_cols)
+
+    edited = st.data_editor(
+        selection_df,
+        column_config={
+            "Auswählen": st.column_config.CheckboxColumn("✓", default=True, width="small"),
+            "Name": st.column_config.TextColumn("Name", width="medium"),
+            "Firma": st.column_config.TextColumn("Firma", width="medium"),
+            "Titel": st.column_config.TextColumn("Titel", width="large"),
+            "Status": st.column_config.TextColumn("Status", width="small"),
+            "Angereichert": st.column_config.TextColumn("✅", width="small"),
+        },
+        hide_index=True,
+        use_container_width=True,
+        disabled=[c for c in show_cols.keys() if c != "Auswählen"],
+        key="contact_table",
+    )
+
+    # Ausgewählte Indizes ermitteln
+    selected_indices = [i for i, checked in enumerate(edited["Auswählen"]) if checked]
+    st.session_state.contact_selection = list(edited["Auswählen"])
+
+    to_enrich = len(selected_indices)
 
     # --- START ---
     st.markdown("---")
 
     if to_enrich == 0:
-        st.success("✅ Alle Kontakte sind bereits angereichert! Deaktiviere 'Bereits angereicherte überspringen' um sie erneut zu durchsuchen.")
+        st.warning("Keine Kontakte ausgewählt. Bitte mindestens einen Kontakt auswählen.")
     else:
         estimated_time = to_enrich * max_searches * 2
         st.info(
-            f"**{to_enrich} Kontakte** werden mit **{max_searches} Suchen** pro Kontakt durchsucht. "
+            f"**{to_enrich} Kontakte** ausgewählt · **{max_searches} Suchen** pro Kontakt · "
             f"Geschätzte Dauer: ~{estimated_time // 60} Min {estimated_time % 60} Sek."
         )
 
-    if st.button(f"🚀 Alle {to_enrich} Kontakte anreichern", type="primary", disabled=(to_enrich == 0)):
+    if st.button(f"🚀 {to_enrich} Kontakte anreichern", type="primary", disabled=(to_enrich == 0)):
         engine = EnrichmentEngine(
             api_key=api_key if api_key else None,
             hunter_api_key=hunter_api_key if hunter_api_key else None,
@@ -414,6 +462,7 @@ if uploaded_df is not None:
         with st.spinner("Enrichment läuft..."):
             results, skipped, errors = run_enrichment(
                 df, engine, max_searches, skip_enriched, progress_bar, status_container,
+                selected_indices=selected_indices,
             )
 
         # --- Zusammenfassung ---
