@@ -190,42 +190,428 @@ ANTI-PATTERNS (NIEMALS in der Nachricht):
 """
 
 
+def _is_safe_url(url: str) -> bool:
+    """SSRF-Guard: Verhindert Requests auf interne IPs und Metadata-Services.
+
+    Blockiert:
+    - Nicht-HTTP(S)-Schemas (file://, ftp://, gopher://)
+    - Interne IP-Ranges (localhost, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+    - Cloud-Metadata (169.254.169.254 — AWS/GCP/Azure)
+    - Link-Local (169.254.0.0/16)
+    - IPv6-Loopback und Link-Local (::1, fe80::)
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        host_lower = host.lower()
+        # Offensichtliche Keywords sofort blockieren
+        if host_lower in ("localhost", "metadata", "metadata.google.internal"):
+            return False
+        # Alle DNS-A-Records auflösen und jede IP prüfen
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror:
+            return False
+        for info in infos:
+            ip = info[4][0]
+            # IPv4
+            if ip.startswith("127.") or ip.startswith("10."):
+                return False
+            if ip.startswith("169.254."):  # Link-local + Metadata
+                return False
+            if ip.startswith("192.168."):
+                return False
+            if ip.startswith("172."):
+                try:
+                    second = int(ip.split(".")[1])
+                    if 16 <= second <= 31:
+                        return False
+                except (ValueError, IndexError):
+                    return False
+            if ip == "0.0.0.0":
+                return False
+            # IPv6
+            if ip in ("::1", "::") or ip.lower().startswith("fe80:") or ip.lower().startswith("fc") or ip.lower().startswith("fd"):
+                return False
+        return True
+    except Exception:
+        # Fail-closed: Bei jedem Fehler Request blockieren
+        return False
+
+
+def _sanitize_llm_input(text: str, max_len: int = 500) -> str:
+    """Entfernt Prompt-Injection-Versuche aus User-Inputs vor LLM-Prompt.
+    Schützt gegen: eingeschleuste Instruktionen, Rollenwechsel, System-Override.
+    """
+    if not text:
+        return ""
+    s = str(text)
+    # Prompt-Injection-Muster entfernen (Instruktionen, die Claude/Gemini umlenken könnten)
+    injection_patterns = [
+        r'(?i)ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?)',
+        r'(?i)disregard\s+(all\s+)?(previous|above)',
+        r'(?i)system\s*[:\]]\s*',
+        r'(?i)</?(system|instruction|prompt)>',
+        r'(?i)you\s+are\s+now\s+',
+        r'(?i)new\s+instructions?[:\s]',
+        r'(?i)forget\s+(everything|all)',
+    ]
+    for pat in injection_patterns:
+        s = re.sub(pat, '[FILTERED]', s)
+    # Kontrollzeichen entfernen (außer normalem Whitespace)
+    s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', s)
+    # Länge begrenzen
+    if len(s) > max_len:
+        s = s[:max_len] + "..."
+    return s.strip()
+
+
+def _lookup_leadgen_context(name: str, company: str, db_path: str) -> dict:
+    """Option C: Match mit Lead-Gen-DB (selina-ai-leadgen/data/automation.db).
+
+    Prüft read-only, ob die Person bereits in Selinas Outbound-Kontakten ist.
+    Gibt bei Match zurück: Status, letzte Aktionen, Reply-Text, LinkedIn-URL.
+    Bei kein Match: leeres Dict.
+
+    Sicherheit: read-only (Mode `ro`), keine SQL-Injection möglich (Parameterized Queries).
+    """
+    import sqlite3
+    import os
+
+    if not db_path or not os.path.exists(db_path):
+        return {}
+    if not name:
+        return {}
+
+    # Namen-Parts extrahieren (für first_name + last_name Match)
+    parts = [p.strip() for p in name.strip().split() if p.strip()]
+    if len(parts) < 2:
+        return {}
+    first_name = parts[0]
+    last_name = parts[-1]
+
+    try:
+        # Read-only URI-Modus — kein Write möglich
+        uri = f"file:{db_path}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, timeout=2.0)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        # Match-Strategie:
+        # 1. Exakt: first_name + last_name + company
+        # 2. Fallback: first_name + last_name (wenn Firma in DB anders heißt)
+        query = """
+            SELECT id, linkedin_url, first_name, last_name, company, title,
+                   status, connection_sent_at, connected_at, messaged_at,
+                   scorecard_sent_at, calendly_sent_at, interested_at,
+                   reply_text, reply_classification, reply_received_at,
+                   last_action_at, language
+            FROM contacts
+            WHERE LOWER(first_name) = LOWER(?)
+              AND LOWER(last_name) = LOWER(?)
+            ORDER BY
+                CASE WHEN LOWER(company) = LOWER(?) THEN 0 ELSE 1 END,
+                last_action_at DESC
+            LIMIT 1
+        """
+        cur.execute(query, (first_name, last_name, company or ""))
+        row = cur.fetchone()
+        conn.close()
+
+        if not row:
+            return {}
+
+        # Score: exakter Firma-Match = höhere Konfidenz
+        firma_match = (row["company"] or "").strip().lower() == (company or "").strip().lower()
+        confidence = "hoch" if firma_match else "mittel (Name stimmt, Firma weicht ab)"
+
+        return {
+            "matched": True,
+            "confidence": confidence,
+            "leadgen_id": row["id"],
+            "linkedin_url": row["linkedin_url"] or "",
+            "status": row["status"] or "",
+            "title_in_db": row["title"] or "",
+            "company_in_db": row["company"] or "",
+            "language": row["language"] or "",
+            "connection_sent_at": row["connection_sent_at"] or "",
+            "connected_at": row["connected_at"] or "",
+            "messaged_at": row["messaged_at"] or "",
+            "scorecard_sent_at": row["scorecard_sent_at"] or "",
+            "calendly_sent_at": row["calendly_sent_at"] or "",
+            "interested_at": row["interested_at"] or "",
+            "last_action_at": row["last_action_at"] or "",
+            "reply_text": row["reply_text"] or "",
+            "reply_classification": row["reply_classification"] or "",
+            "reply_received_at": row["reply_received_at"] or "",
+        }
+    except Exception as e:
+        print(f"  [LeadGen-DB] ⚠️ Zugriff fehlgeschlagen: {e}")
+        return {}
+
+
+def _format_leadgen_context_for_llm(ctx: dict) -> str:
+    """Formatiert den LeadGen-Context als Text-Block für das LLM-Prompt."""
+    if not ctx or not ctx.get("matched"):
+        return ""
+
+    lines = ["=== INTERNER KONTEXT (aus Selinas Outbound-Historie) ==="]
+    lines.append(f"Match-Konfidenz: {ctx['confidence']}")
+    if ctx.get("linkedin_url"):
+        lines.append(f"LinkedIn-URL (verifiziert): {ctx['linkedin_url']}")
+    if ctx.get("title_in_db"):
+        lines.append(f"Titel in DB: {ctx['title_in_db']}")
+    if ctx.get("language"):
+        lines.append(f"Sprache der bisherigen Kommunikation: {ctx['language']}")
+    lines.append(f"Outbound-Status: {ctx['status']}")
+
+    timeline = []
+    if ctx.get("connection_sent_at"):
+        timeline.append(f"  • Connection-Request: {ctx['connection_sent_at']}")
+    if ctx.get("connected_at"):
+        timeline.append(f"  • Connected am: {ctx['connected_at']}")
+    if ctx.get("messaged_at"):
+        timeline.append(f"  • Opener-Nachricht: {ctx['messaged_at']}")
+    if ctx.get("scorecard_sent_at"):
+        timeline.append(f"  • Scorecard-Follow-up: {ctx['scorecard_sent_at']}")
+    if ctx.get("calendly_sent_at"):
+        timeline.append(f"  • Calendly-Einladung: {ctx['calendly_sent_at']}")
+    if ctx.get("interested_at"):
+        timeline.append(f"  • Interesse signalisiert: {ctx['interested_at']}")
+    if ctx.get("reply_received_at"):
+        timeline.append(f"  • Reply erhalten: {ctx['reply_received_at']}")
+    if timeline:
+        lines.append("Timeline:")
+        lines.extend(timeline)
+
+    if ctx.get("reply_text"):
+        reply_short = ctx["reply_text"][:500]
+        lines.append(f"Reply-Text: \"{reply_short}\"")
+        if ctx.get("reply_classification"):
+            lines.append(f"Reply-Klassifizierung: {ctx['reply_classification']}")
+
+    lines.append("")
+    lines.append("WICHTIG: Diese Person ist KEIN kalter Kontakt. Berücksichtige den bisherigen Verlauf")
+    lines.append("beim Formulieren der nächsten Nachricht — keine Wiederholungen, auf Reply-Text eingehen,")
+    lines.append("anknüpfen an den letzten Kontaktpunkt.")
+    lines.append("=== ENDE INTERNER KONTEXT ===")
+    return "\n".join(lines)
+
+
 class EnrichmentEngine:
-    """Engine v4: 5 Email-Strategien + SMTP-Verifizierung."""
+    """Engine v4: 5 Email-Strategien + SMTP-Verifizierung + LeadGen-DB-Match."""
+
+    # Default-Pfad zur Lead-Gen-DB (konfigurierbar via ENV LEADGEN_DB_PATH)
+    DEFAULT_LEADGEN_DB = str(
+        __import__("pathlib").Path.home()
+        / "Documents" / "AI Products I build" / "selina-ai-leadgen" / "data" / "automation.db"
+    )
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         hunter_api_key: Optional[str] = None,
         llm_provider: str = "gemini",
+        leadgen_db_path: Optional[str] = None,
     ):
+        import os
         self.api_key = api_key
         self.hunter_api_key = hunter_api_key
         self.llm_provider = llm_provider  # "gemini" oder "perplexity"
         self.ddgs = DDGS()
+        # LeadGen-DB-Pfad: Parameter > ENV > Default
+        self.leadgen_db_path = (
+            leadgen_db_path
+            or os.environ.get("LEADGEN_DB_PATH")
+            or self.DEFAULT_LEADGEN_DB
+        )
 
     # ==================================================================
     # LLM HELPER: Gemini & Perplexity
     # ==================================================================
 
-    def _call_gemini(self, prompt: str, max_tokens: int = 6000) -> str:
-        """Gemini 2.5 Flash mit Google Search Grounding."""
+    def _call_gemini(self, prompt: str, max_tokens: int = 6000, use_grounding: bool = True) -> str:
+        """Gemini 2.5 Flash mit optionalem Google Search Grounding. Retry + Fallback."""
         from google import genai
         from google.genai import types
 
-        provider_label = "Gemini 2.5 Flash + Google Grounding"
-        print(f"  [LLM] Analysiere mit {provider_label}...")
-
+        models = ["gemini-2.5-flash", "gemini-2.0-flash"]
         client = genai.Client(api_key=self.api_key)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-preview-05-20",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                max_output_tokens=max_tokens,
-            ),
-        )
-        return response.text.strip()
+
+        config_kwargs = {"max_output_tokens": max_tokens}
+        if use_grounding:
+            config_kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+
+        for model in models:
+            label = f"{model}{' + Google Grounding' if use_grounding else ''}"
+            for attempt in range(2):
+                try:
+                    if attempt == 0:
+                        print(f"  [LLM] Analysiere mit {label}...")
+                    else:
+                        print(f"  [LLM] Retry {label}...")
+                    response = client.models.generate_content(
+                        model=model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(**config_kwargs),
+                    )
+                    return response.text.strip()
+                except Exception as e:
+                    err = str(e)
+                    if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                        if "free_tier" in err.lower():
+                            print(f"  [LLM] ⚠️ Kostenloses Gemini-Kontingent aufgebraucht!")
+                            print(f"  [LLM] → Bitte Billing in Google AI Studio aktivieren (aistudio.google.com)")
+                        else:
+                            print(f"  [LLM] {model} Rate-Limit erreicht, warte 10s...")
+                            time.sleep(10)
+                        continue
+                    if "503" in err or "UNAVAILABLE" in err:
+                        print(f"  [LLM] {model} überlastet, warte 5s...")
+                        time.sleep(5)
+                        continue
+                    raise
+            print(f"  [LLM] {model} nicht verfügbar, versuche nächstes Modell...")
+
+        raise Exception("Alle Gemini-Modelle sind aktuell überlastet. Bitte später erneut versuchen.")
+
+    def _plan_research(self, name: str, company: str, title: str, location: str) -> list[str]:
+        """Schritt 1: Flash entwirft gezielte Recherche-Fragen für die Person."""
+        # Prompt-Injection-Schutz: User-Input aus Excel sanitizen
+        safe_name = _sanitize_llm_input(name, 200)
+        safe_company = _sanitize_llm_input(company, 200)
+        safe_title = _sanitize_llm_input(title, 200)
+        safe_location = _sanitize_llm_input(location, 200)
+
+        print(f"  [Research Plan] Entwerfe gezielte Suchfragen für {safe_name}...")
+
+        prompt = f"""Du bist ein Research-Planer. Deine Aufgabe: Erstelle 8-12 sehr spezifische
+Recherche-Fragen über diese Person, die ein Deep Research Agent mit Google-Suche beantworten soll.
+
+PERSON:
+- Name: {safe_name}
+- Titel: {safe_title}
+- Firma: {safe_company}
+- Standort: {safe_location}
+
+KONTEXT: Selina Gärtner ist KI-Strategieberaterin für Life Science & MedTech.
+Sie will diese Person als potenziellen Kunden ansprechen.
+
+ERSTELLE Recherche-Fragen zu diesen Kategorien (mindestens 1 Frage pro Kategorie,
+bei LinkedIn und KI/Digital jeweils 2-3 Fragen):
+
+1. Person & Karriere (aktueller Job, Werdegang, Ausbildung, Expertise)
+2. Firma (Produkte, Größe, Marktposition, Funding, aktuelle News)
+3. KI & Digitalisierung (nutzt die Firma KI? Gibt es eine Digital-Strategie? EU AI Act betroffen?)
+
+4. **LinkedIn-Tiefe** (HOCHRELEVANT für Personalisierung — mindestens 3 Fragen hier!):
+   - Welche LinkedIn-Posts hat {safe_name} in 2025/2026 veröffentlicht?
+     Was waren die Themen? Welche Haltung zu KI/Digital?
+   - Welche LinkedIn-Artikel/Pulse-Beiträge hat {safe_name} geschrieben?
+   - Welche Posts kommentiert oder teilt {safe_name} typischerweise?
+     (gibt Aufschluss über Interessen und Netzwerk)
+   - Welche LinkedIn-Gruppen oder Communities ist {safe_name} Mitglied?
+   - Hat {safe_name} "Open to Work", "Hiring" oder andere LinkedIn-Signale gesetzt?
+   - Welche gemeinsamen Themen-Hashtags nutzt {safe_name} auf LinkedIn?
+
+5. Konferenzen & Medien (Speaker-Auftritte 2025/2026, Podcasts, YouTube, Publikationen)
+6. Persönliches (Interessen, Ehrenämter, sichtbare gemeinsame Kontakte mit Selina Gärtner)
+7. Timing-Signale (Jobwechsel, neues Funding, Stellenanzeigen für Digital/KI-Rollen,
+   Unternehmens-Restrukturierung, Pressemitteilungen der letzten 3 Monate)
+
+REGELN:
+- Jede Frage muss den NAMEN oder die FIRMA der Person enthalten
+- Fragen müssen so spezifisch sein, dass Google gute Ergebnisse liefert
+- Bei LinkedIn-Fragen: explizit "site:linkedin.com" oder "LinkedIn post" erwähnen,
+  damit Google gezielt LinkedIn-Inhalte findet
+- Formuliere als Suchfrage, nicht als abstrakte Frage
+- Antworte NUR mit einer JSON-Liste von Strings, keine Erklärungen
+
+Beispiel-Output:
+[
+  "Was ist der Karriereweg von Max Mustermann bei BioTech AG?",
+  "Welche LinkedIn-Posts hat Max Mustermann in 2025 veröffentlicht? site:linkedin.com",
+  "Welche Haltung hat Max Mustermann zu KI in der Diagnostik auf LinkedIn geäußert?",
+  "Nutzt BioTech AG künstliche Intelligenz oder KI-Tools?",
+  ...
+]"""
+
+        text = self._call_gemini(prompt, max_tokens=2000, use_grounding=False)
+        # JSON-Array extrahieren
+        if "```" in text:
+            parts = text.split("```")
+            for part in parts:
+                stripped = part.strip()
+                if stripped.startswith("json"):
+                    stripped = stripped[4:].strip()
+                if stripped.startswith("["):
+                    text = stripped
+                    break
+
+        try:
+            questions = json.loads(text)
+            if isinstance(questions, list) and len(questions) > 0:
+                print(f"  [Research Plan] ✅ {len(questions)} Recherche-Fragen erstellt")
+                return questions
+        except json.JSONDecodeError:
+            pass
+
+        # Zweiter Versuch: JSON-Array irgendwo im Text finden
+        match = re.search(r'\[.*\]', text, re.DOTALL)
+        if match:
+            try:
+                questions = json.loads(match.group())
+                if isinstance(questions, list) and len(questions) > 0:
+                    print(f"  [Research Plan] ✅ {len(questions)} Recherche-Fragen erstellt (aus Text extrahiert)")
+                    return questions
+            except json.JSONDecodeError:
+                pass
+
+        print(f"  [Research Plan] ⚠️ JSON-Fehler, verwende Fallback-Fragen")
+        # Fallback: Basis-Fragen
+        return [
+                f"Wer ist {name} und was ist sein/ihr Karriereweg?",
+                f"Was macht die Firma {company}? Produkte, Größe, Marktposition?",
+                f"Nutzt {company} künstliche Intelligenz oder KI?",
+                f"{name} Konferenzen Speaker 2025 2026",
+                f"{company} News Partnerschaften Funding 2025 2026",
+                # LinkedIn-Tiefe (3 Fragen)
+                f"{name} LinkedIn Posts 2025 2026 site:linkedin.com",
+                f"{name} LinkedIn Artikel Pulse Meinung KI Digitalisierung",
+                f"{name} LinkedIn Kommentar Aktivität Hashtags",
+                f"{company} Stellenanzeigen Digital KI AI",
+                f"{company} EU AI Act MDR IVDR Compliance",
+            ]
+
+    def _execute_research(self, questions: list[str], name: str, company: str) -> str:
+        """Schritt 2: Flash + Google Grounding beantwortet jede Frage mit echten Suchergebnissen."""
+        print(f"  [Deep Research] Starte Recherche mit {len(questions)} Fragen...")
+
+        combined_prompt = f"""Du bist ein Deep Research Agent. Beantworte JEDE der folgenden Fragen
+über {name} ({company}) so detailliert wie möglich. Nutze deine Google-Suche aktiv für jede Frage.
+
+WICHTIG:
+- Suche AKTIV nach Informationen — nicht aus dem Gedächtnis antworten
+- Nenne immer die Quelle/URL wo du die Info gefunden hast
+- Wenn du nichts findest, schreibe "Keine Ergebnisse gefunden"
+- Antworte auf Deutsch
+
+RECHERCHE-FRAGEN:
+"""
+        for i, q in enumerate(questions, 1):
+            combined_prompt += f"\n{i}. {q}"
+
+        combined_prompt += """
+
+FORMAT: Beantworte jede Frage mit einer nummerierten Antwort. Sei ausführlich und nenne Quellen."""
+
+        result = self._call_gemini(combined_prompt, max_tokens=8000, use_grounding=True)
+        print(f"  [Deep Research] ✅ Recherche abgeschlossen ({len(result)} Zeichen)")
+        return result
 
     def _call_perplexity(self, prompt: str, max_tokens: int = 6000) -> str:
         """Perplexity sonar-deep-research – 30+ Suchläufe, tiefste Recherche."""
@@ -264,9 +650,22 @@ class EnrichmentEngine:
     # ==================================================================
 
     def _fetch_page_text(self, url: str, timeout: int = 10) -> str:
-        """Holt Textinhalt einer Webseite."""
+        """Holt Textinhalt einer Webseite. SSRF-geschützt: nur öffentliche URLs."""
+        # SSRF-Guard: keine internen IPs, keine Metadata-Services, nur http(s)
+        if not _is_safe_url(url):
+            return ""
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
+            # allow_redirects=False + manuelles Re-Check, damit Redirects nicht
+            # an interne IPs umgeleitet werden können
+            resp = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=False)
+            # Folge Redirects nur wenn Ziel auch safe ist
+            redirects = 0
+            while resp.is_redirect and redirects < 3:
+                next_url = resp.headers.get("Location", "")
+                if not next_url or not _is_safe_url(next_url):
+                    return ""
+                resp = requests.get(next_url, headers=HEADERS, timeout=timeout, allow_redirects=False)
+                redirects += 1
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             for tag in soup(["script", "style", "nav", "footer"]):
@@ -812,6 +1211,30 @@ class EnrichmentEngine:
         clean_name = name.replace(",", "").strip()
         firma_kw = self._company_keywords(company)
 
+        # ==============================================================
+        # LEADGEN-DB MATCH (Option C): prüfen ob Person schon in Selinas
+        # Outbound-Historie ist → Status + Timeline + Reply-Text holen
+        # ==============================================================
+        leadgen_ctx = _lookup_leadgen_context(clean_name, company, self.leadgen_db_path)
+        if leadgen_ctx.get("matched"):
+            print(f"  [LeadGen-Match] ✅ '{clean_name}' gefunden — "
+                  f"Status: {leadgen_ctx['status']} · Konfidenz: {leadgen_ctx['confidence']}")
+            findings["leadgen_match"] = leadgen_ctx
+            # LinkedIn-URL aus DB direkt übernehmen (verifiziert)
+            if leadgen_ctx.get("linkedin_url"):
+                findings["linkedin_activity"] = (
+                    f"Profil: {leadgen_ctx['linkedin_url']}\n"
+                    f"Outbound-Status: {leadgen_ctx['status']}"
+                )
+            # Reply-Text als "relevant_info" vormerken (LLM bekommt es gleich)
+            if leadgen_ctx.get("reply_text"):
+                findings["relevant_info"] = (
+                    f"Reply aus bisheriger Kommunikation ({leadgen_ctx.get('reply_classification') or 'n/a'}): "
+                    f"{leadgen_ctx['reply_text'][:300]}"
+                )
+        else:
+            findings["leadgen_match"] = {}
+
         # Alle gefundenen Emails aus allen Strategien
         all_found_emails = []
 
@@ -1103,9 +1526,22 @@ class EnrichmentEngine:
         findings["sources"] = relevant_sources
 
         # ==============================================================
-        # CLAUDE-ANALYSE: Zusammenfassung + Nachricht + Kanal-Empfehlung
+        # DEEP RESEARCH: Plan → Search → Analyze (3-Stufen-Workflow)
         # ==============================================================
-        if self.api_key and all_texts:
+        deep_research_results = ""
+        if self.api_key and self.llm_provider == "gemini":
+            try:
+                # Schritt 1: Recherche-Plan erstellen
+                research_questions = self._plan_research(name, company, title, location)
+                # Schritt 2: Gezielte Recherche mit Google Grounding
+                deep_research_results = self._execute_research(research_questions, name, company)
+            except Exception as e:
+                print(f"  [Deep Research] ⚠️ Fehler: {e} — fahre ohne Deep Research fort")
+
+        # ==============================================================
+        # LLM-ANALYSE: Zusammenfassung + Nachricht + Kanal-Empfehlung
+        # ==============================================================
+        if self.api_key and (all_texts or deep_research_results):
             claude = self._analyze_with_llm(
                 name=name,
                 company=company,
@@ -1113,6 +1549,7 @@ class EnrichmentEngine:
                 location=location,
                 search_results="\n\n".join(all_texts),
                 findings=findings,
+                deep_research_results=deep_research_results,
             )
             if claude:
                 findings["zusammenfassung"] = claude.get("zusammenfassung", "")
@@ -1139,13 +1576,106 @@ class EnrichmentEngine:
                 if monitoring_tags:
                     findings["monitoring_tags"] = json.dumps(monitoring_tags, ensure_ascii=False)
 
+        # ==============================================================
+        # PFLICHTFELD-FALLBACKS: Diese 4 Felder sind NIEMALS leer
+        # Kombiniert: LLM-Analyse + LeadGen-DB + Web-Scraping + Logik
+        # ==============================================================
+        lg = findings.get("leadgen_match", {}) or {}
+        lg_status = lg.get("status", "") if lg.get("matched") else ""
+
+        # 1. KI-Zusammenfassung — mindestens Basis-Facts
+        if not findings["zusammenfassung"].strip():
+            parts = []
+            parts.append(f"{name} ist {title} bei {company}." if title and company else f"Kontakt: {name}.")
+            if location:
+                parts.append(f"Standort: {location}.")
+            if lg_status:
+                parts.append(f"Outbound-Status: {lg_status}.")
+            if findings.get("email"):
+                parts.append(f"Email: {findings['email']} ({findings.get('email_status', '')}).")
+            if findings.get("conferences") and findings["conferences"] != "Nicht gefunden":
+                parts.append(f"Konferenzen: {findings['conferences'][:200]}.")
+            if findings.get("linkedin_activity") and findings["linkedin_activity"] != "Nicht gefunden":
+                parts.append(f"LinkedIn: {findings['linkedin_activity'][:200]}.")
+            parts.append("Wenig öffentliche Informationen verfügbar — persönliche Recherche empfohlen.")
+            findings["zusammenfassung"] = " ".join(parts)
+            print(f"  [Fallback] KI-Zusammenfassung aus Basis-Daten generiert")
+
+        # 2. Personalisierte Nachricht — immer eine sendbare Nachricht
+        if not findings["personalisierte_nachricht"].strip():
+            german_indicators = ["deutsch", "dach", "germany", "austria", "swiss",
+                                 "münchen", "berlin", "hamburg", "köln", "de"]
+            is_de = any(ind in (location or "").lower() for ind in german_indicators)
+            if lg.get("matched") and lg.get("reply_text"):
+                # Bekannter Kontakt mit Reply → Follow-up
+                if is_de:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hallo {name.split()[0]},\n\n"
+                        f"danke für die Rückmeldung! Wie sieht es aktuell bei {company} "
+                        f"mit dem Thema KI-Strategie aus — hat sich seit unserem letzten "
+                        f"Austausch etwas getan?\n\n"
+                        f"Herzliche Grüße, Selina"
+                    )
+                else:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hi {name.split()[0]},\n\n"
+                        f"Thanks for getting back! How are things at {company} regarding "
+                        f"AI strategy — has anything changed since we last connected?\n\n"
+                        f"Best wishes, Selina"
+                    )
+            elif is_de:
+                findings["personalisierte_nachricht"] = (
+                    f"Hallo {name.split()[0]},\n\n"
+                    f"ich beschäftige mich intensiv mit KI-Strategie in Life Science & MedTech "
+                    f"und bin auf {company} aufmerksam geworden. Mich würde interessieren: "
+                    f"Wie geht ihr bei {company} aktuell das Thema KI an?\n\n"
+                    f"Herzliche Grüße, Selina"
+                )
+            else:
+                findings["personalisierte_nachricht"] = (
+                    f"Hi {name.split()[0]},\n\n"
+                    f"I focus on AI strategy for Life Science & MedTech and came across {company}. "
+                    f"I'd be curious to know: how is {company} currently approaching AI?\n\n"
+                    f"Best wishes, Selina"
+                )
+            print(f"  [Fallback] Personalisierte Nachricht generiert")
+
+        # 3. Kanal-Empfehlung — immer eine Empfehlung
+        if not findings["kanal_empfehlung"].strip():
+            if findings.get("email") and "verifiziert" in findings.get("email_status", "").lower():
+                findings["kanal_empfehlung"] = "EMAIL — Verifizierte Email vorhanden"
+            elif findings.get("email"):
+                findings["kanal_empfehlung"] = "EMAIL — Email gefunden (konstruiert, bitte prüfen)"
+            else:
+                findings["kanal_empfehlung"] = "LINKEDIN — Keine sichere Email verfügbar"
+            print(f"  [Fallback] Kanal-Empfehlung generiert")
+
+        # 4. Relevante Infos für Ansprache — immer ausfüllen
+        if not findings.get("relevant_info", "").strip():
+            info_parts = []
+            if title and company:
+                info_parts.append(f"• {title} bei {company}")
+            if location:
+                info_parts.append(f"• Standort: {location}")
+            if lg_status:
+                info_parts.append(f"• Bereits kontaktiert (Status: {lg_status})")
+            if lg.get("reply_text"):
+                info_parts.append(f"• Hat geantwortet: \"{lg['reply_text'][:100]}...\"")
+            if findings.get("conferences") and findings["conferences"] != "Nicht gefunden":
+                info_parts.append(f"• Konferenzen: {findings['conferences'][:150]}")
+            if not info_parts:
+                info_parts.append("• Wenig öffentliche Daten — persönliche LinkedIn-Recherche empfohlen")
+                info_parts.append(f"• Branche/Titel legen KI-Strategiebedarf nahe (Life Science / MedTech)")
+            findings["relevant_info"] = "\n".join(info_parts)
+            print(f"  [Fallback] Relevante Infos aus Basis-Daten generiert")
+
         return findings
 
     # ==================================================================
     # CLAUDE-ANALYSE: Verdaute Zusammenfassung + Personalisierte Nachricht
     # ==================================================================
 
-    def _analyze_with_llm(self, name, company, title, location, search_results, findings):
+    def _analyze_with_llm(self, name, company, title, location, search_results, findings, deep_research_results=""):
         """
         LLM-Analyse: Alle Fundstücke werden mit Selinas Profil abgeglichen.
         Unterstützt zwei Provider:
@@ -1155,6 +1685,11 @@ class EnrichmentEngine:
         if not self.api_key:
             return {}
         try:
+            # Prompt-Injection-Schutz: User-Inputs sanitizen
+            safe_name = _sanitize_llm_input(name, 200)
+            safe_company = _sanitize_llm_input(company, 200)
+            safe_title = _sanitize_llm_input(title, 200)
+            safe_location = _sanitize_llm_input(location, 200)
 
             # Sprache aus Location/Suche ableiten
             german_indicators = ["deutsch", "dach", "germany", "austria", "swiss",
@@ -1167,15 +1702,19 @@ class EnrichmentEngine:
             # Kontakt-Zusammenfassung für den Prompt
             kontakt_info = f"""
 KONTAKT:
-- Name: {name}
-- Titel: {title}
-- Firma: {company}
-- Standort: {location}
+- Name: {safe_name}
+- Titel: {safe_title}
+- Firma: {safe_company}
+- Standort: {safe_location}
 - Gefundene Email: {findings.get('email', 'Nicht gefunden')} (Status: {findings.get('email_status', '')})
 - SMTP-Check: {findings.get('email_verifizierung', 'nicht geprüft')}
 - Persönliches Telefon: {findings.get('personal_phone', 'Nicht gefunden')}
 - Firmentelefon: {findings.get('company_phone', 'Nicht gefunden')}
 """
+
+            # LeadGen-Context: falls die Person schon in Selinas Outbound-DB ist,
+            # den Timeline/Reply-Kontext ins Prompt mitgeben
+            leadgen_block = _format_leadgen_context_for_llm(findings.get("leadgen_match", {}))
 
             prompt = f"""Du bist Selinas Deep Research Assistentin. Deine Aufgabe: Aus allen Recherche-Ergebnissen
 ein vollständiges Dossier über diesen Kontakt erstellen und eine kurze, persönliche Nachricht formulieren.
@@ -1184,10 +1723,17 @@ ein vollständiges Dossier über diesen Kontakt erstellen und eine kurze, persö
 
 {kontakt_info}
 
+{leadgen_block}
+
 ═══════════════════════════════════════════════════
-ALLE RECHERCHE-ERGEBNISSE:
+DEEP RESEARCH ERGEBNISSE (Google-Recherche):
 ═══════════════════════════════════════════════════
-{search_results[:15000]}
+{deep_research_results[:12000] if deep_research_results else "Keine Deep Research durchgeführt."}
+
+═══════════════════════════════════════════════════
+ZUSÄTZLICHE WEB-SCRAPING ERGEBNISSE:
+═══════════════════════════════════════════════════
+{search_results[:8000]}
 
 ═══════════════════════════════════════════════════
 DEEP RESEARCH DOSSIER — AUFGABEN:
@@ -1291,6 +1837,32 @@ DEEP RESEARCH DOSSIER — AUFGABEN:
    - "[Personenname]" + LinkedIn (für neue Posts)
    Diese Tags werden beim nächsten Scan verwendet um NUR NEUE Infos zu finden.
 
+═══════════════════════════════════════════════════
+ABSOLUTE PFLICHT — DIESE 4 FELDER MÜSSEN IMMER AUSGEFÜLLT WERDEN:
+═══════════════════════════════════════════════════
+
+Auch wenn die Recherche wenig ergibt: Kombiniere ALLES was du hast —
+Deep Research + Web-Scraping + LeadGen-DB-Kontext (falls vorhanden) +
+Branchenwissen + logische Schlussfolgerungen aus Titel/Firma/Standort.
+
+1. **zusammenfassung** → IMMER ausfüllen. Minimum 5 Sätze. Fasse zusammen was du über
+   Person, Firma, KI-Bezug und Anknüpfungspunkte weißt. Wenn wenig gefunden:
+   schreibe was du aus Titel+Firma+Branche ABLEITEN kannst (z.B. "Als CEO eines
+   MedTech-Unternehmens in München ist davon auszugehen, dass...")
+
+2. **personalisierte_nachricht** → IMMER ausfüllen. Fertige Nachricht, 1:1 sendbar.
+   Wenn wenig Fakten: nutze Titel + Firma + Branche als Hook. Es gibt IMMER
+   genug für eine authentische Nachricht.
+
+3. **kanal_empfehlung** → IMMER ausfüllen. "EMAIL" oder "LINKEDIN" + Begründung.
+
+4. **anknuepfungspunkte** → IMMER ausfüllen. Minimum 2 Punkte. Wenn wenig gefunden:
+   leite aus Branche/Titel/Firma ab (z.B. "CEO eines Life-Science-Unternehmens →
+   EU AI Act und MDR-Compliance sind aktuelle Themen").
+
+NIEMALS leere Strings ("") oder "Keine Daten gefunden" für diese 4 Felder zurückgeben.
+Leere Felder sind ein FEHLER.
+
 Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
 {{
   "zusammenfassung": "Vollständiges Dossier mit allen Kategorien A-G...",
@@ -1323,7 +1895,7 @@ Antworte im folgenden JSON-Format (ohne Markdown-Codeblock):
             print(f"  [LLM] Rohtext: {text[:200]}...")
             return {}
         except Exception as e:
-            print(f"  [LLM] Perplexity-Fehler: {e}")
+            print(f"  [LLM] {self.llm_provider.capitalize()}-Fehler: {e}")
             return {}
 
     # ==================================================================

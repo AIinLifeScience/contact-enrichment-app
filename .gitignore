@@ -1,6 +1,42 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+
+# Environment / Secrets
 .env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Daten mit personenbezogenen Infos (DSGVO)
+data/
+*.db
 *.xlsx
+*.xls
+*.csv
+kontakte*
+contacts*
+leads*
+enriched*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Legacy
 create_enriched_excel.py

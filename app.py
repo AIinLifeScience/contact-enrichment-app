@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from enrichment_engine import EnrichmentEngine
+from enrichment_db import EnrichmentDB
 
 # --- .env Datei laden (lokale API Keys) ---
 def _load_env():
@@ -28,14 +29,126 @@ _load_env()
 
 # --- Page Config ---
 st.set_page_config(
-    page_title="Contact Enrichment Tool",
-    page_icon="🔍",
+    page_title="Contact Enrichment — Selina Gaertner Consulting",
+    page_icon="🧬",
     layout="wide",
 )
 
-# --- Constants ---
-DEFAULT_EXCEL = "/Users/selina/Documents/AI Products I build/selina-ai-leadgen/kontakte.xlsx"
-DEFAULT_OUTPUT_DIR = "/Users/selina/Documents/AI Products I build/selina-ai-leadgen"
+# --- Corporate Identity ---
+CI_PURPLE = "#370C7B"
+CI_GOLD = "#FCB02F"
+CI_CHARCOAL = "#2D2D2D"
+CI_LIGHT_GREY = "#F5F5F5"
+
+st.markdown(f"""
+<style>
+    /* Header */
+    .stApp header {{
+        background-color: {CI_PURPLE} !important;
+    }}
+    /* Sidebar */
+    section[data-testid="stSidebar"] {{
+        background-color: {CI_LIGHT_GREY} !important;
+        border-right: 3px solid {CI_GOLD};
+    }}
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3 {{
+        color: {CI_PURPLE} !important;
+    }}
+    /* Haupttitel */
+    h1 {{
+        color: {CI_PURPLE} !important;
+        font-family: Arial, sans-serif !important;
+    }}
+    h2, h3 {{
+        color: {CI_PURPLE} !important;
+        font-family: Arial, sans-serif !important;
+    }}
+    /* Primary Buttons */
+    .stButton > button[kind="primary"],
+    button[data-testid="stBaseButton-primary"] {{
+        background-color: {CI_GOLD} !important;
+        color: {CI_CHARCOAL} !important;
+        border: none !important;
+        font-weight: bold !important;
+        font-family: Arial, sans-serif !important;
+    }}
+    .stButton > button[kind="primary"]:hover,
+    button[data-testid="stBaseButton-primary"]:hover {{
+        background-color: {CI_PURPLE} !important;
+        color: white !important;
+    }}
+    /* Secondary Buttons */
+    .stButton > button {{
+        border-color: {CI_PURPLE} !important;
+        color: {CI_PURPLE} !important;
+        font-family: Arial, sans-serif !important;
+    }}
+    /* Metrics */
+    [data-testid="stMetricValue"] {{
+        color: {CI_PURPLE} !important;
+        font-family: Arial, sans-serif !important;
+    }}
+    /* Progress bar */
+    .stProgress > div > div > div {{
+        background-color: {CI_GOLD} !important;
+    }}
+    /* Radio buttons */
+    .stRadio > div > label > div:first-child {{
+        color: {CI_PURPLE} !important;
+    }}
+    /* Info boxes */
+    .stAlert {{
+        font-family: Arial, sans-serif !important;
+    }}
+    /* Gold accent line under title */
+    .ci-accent {{
+        height: 3px;
+        background: linear-gradient(90deg, {CI_GOLD}, {CI_PURPLE});
+        margin: -10px 0 20px 0;
+        border-radius: 2px;
+    }}
+    /* Footer */
+    .ci-footer {{
+        text-align: center;
+        color: {CI_CHARCOAL}99;
+        font-size: 12px;
+        font-family: Arial, sans-serif;
+        padding: 20px 0;
+        border-top: 2px solid {CI_GOLD};
+        margin-top: 40px;
+    }}
+    /* Body font — span ausschließen, damit Material-Icons (arrow_down etc.) erhalten bleiben */
+    .stMarkdown, .stText, p, li {{
+        font-family: Arial, sans-serif !important;
+    }}
+    /* Material Icons NICHT überschreiben — sonst erscheint Icon-Name als Text */
+    span[class*="material-icons"],
+    span[class*="material-symbols"],
+    [data-testid="stIconMaterial"],
+    [data-testid="stExpanderToggleIcon"] {{
+        font-family: "Material Symbols Rounded", "Material Icons" !important;
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+# --- Constants (konfigurierbar via .env) ---
+DEFAULT_EXCEL = os.environ.get(
+    "DEFAULT_EXCEL_PATH",
+    str(Path.home() / "Documents" / "AI Products I build" / "selina-ai-leadgen" / "kontakte.xlsx"),
+)
+DEFAULT_OUTPUT_DIR = os.environ.get(
+    "DEFAULT_OUTPUT_DIR",
+    str(Path.home() / "Documents"),
+)
+
+# Sicherheits-Limits
+MAX_UPLOAD_SIZE_MB = 10
+MAX_CONTACTS = 500
+
+# Enrichment-Ergebnis-DB (Auto-Save nach jedem Kontakt)
+enrichment_db = EnrichmentDB()
 
 NEW_COLUMNS = [
     "E-Mail",
@@ -63,6 +176,25 @@ NAME_COLS = ["Name", "name", "NAME", "Kontakt", "kontakt"]
 FIRMA_COLS = ["Firma", "firma", "Company", "company", "Unternehmen"]
 TITEL_COLS = ["Titel/Position", "Titel", "Position", "Title", "titel"]
 ORT_COLS = ["Kontakt Standort", "Standort", "Location", "Stadt", "Firma Stadt"]
+
+
+def _sanitize_error(msg: str, max_len: int = 150) -> str:
+    """Entfernt sensible Infos aus Fehlermeldungen (API Keys, Pfade, URLs)."""
+    import re
+    # API Keys maskieren
+    msg = re.sub(r'(sk-[a-zA-Z0-9_-]{10,})', '[API_KEY]', msg)
+    msg = re.sub(r'(AIza[a-zA-Z0-9_-]{10,})', '[API_KEY]', msg)
+    msg = re.sub(r'([a-f0-9]{32,})', '[TOKEN]', msg)
+    # Auth-Header maskieren
+    msg = re.sub(r'(Bearer\s+)[^\s]+', r'\1[REDACTED]', msg, flags=re.IGNORECASE)
+    msg = re.sub(r'(api_key=)[^&\s]+', r'\1[REDACTED]', msg)
+    # Home-Pfade anonymisieren
+    msg = re.sub(r'/Users/[^/\s]+', '/Users/<user>', msg)
+    msg = re.sub(r'/home/[^/\s]+', '/home/<user>', msg)
+    # Länge begrenzen
+    if len(msg) > max_len:
+        msg = msg[:max_len] + "..."
+    return msg
 
 
 def find_column(df, candidates):
@@ -93,8 +225,12 @@ def is_already_enriched(row):
     return False
 
 
-def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status_container, selected_indices=None):
-    """Reichert ausgewählte Kontakte an. selected_indices = Liste der Zeilen-Indizes."""
+def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status_container,
+                    selected_indices=None, force_rerun_indices=None):
+    """Reichert ausgewählte Kontakte an. Auto-Save in DB nach jedem Kontakt.
+
+    force_rerun_indices: Set von Indizes die trotz Cache neu recherchiert werden.
+    """
     name_col = find_column(df, NAME_COLS)
     firma_col = find_column(df, FIRMA_COLS)
     titel_col = find_column(df, TITEL_COLS)
@@ -104,12 +240,14 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
         st.error("Keine 'Name'-Spalte gefunden!")
         return {}
 
+    force_rerun = force_rerun_indices or set()
     results = {}
     # Nur ausgewählte Zeilen; wenn nichts übergeben → alle
     rows_to_process = [(i, df.iloc[i]) for i in (selected_indices if selected_indices is not None else range(len(df)))]
     total = len(rows_to_process)
     skipped = 0
     errors = 0
+    from_cache = 0
 
     for step, (idx, row) in enumerate(rows_to_process):
         name = get_cell_value(row, name_col)
@@ -122,7 +260,7 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
             progress_bar.progress((step + 1) / total)
             continue
 
-        # Skip already enriched contacts
+        # Skip already enriched contacts (Excel-basiert)
         if skip_enriched and is_already_enriched(row):
             skipped += 1
             with status_container:
@@ -130,10 +268,25 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
             progress_bar.progress((step + 1) / total)
             continue
 
+        # --- DB-Cache-Check: Bereits in Ergebnis-DB? ---
+        if idx not in force_rerun:
+            cached = enrichment_db.lookup(name, firma)
+            if cached and cached.get("zusammenfassung"):
+                from_cache += 1
+                results[idx] = cached
+                age = cached.get("_age_label", "")
+                with status_container:
+                    st.markdown(
+                        f"💾 **{step+1}/{total}:** {name} — **aus DB geladen** ({age})"
+                    )
+                progress_bar.progress((step + 1) / total)
+                continue
+
         with status_container:
             st.markdown(f"🔍 **{step+1}/{total}:** Recherchiere **{name}** ({firma})...")
 
         try:
+            t_start = time.time()
             result = engine.enrich_contact(
                 name=name,
                 company=firma,
@@ -141,7 +294,20 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
                 location=ort,
                 max_searches=max_searches,
             )
+            duration = round(time.time() - t_start, 1)
             results[idx] = result
+
+            # --- AUTO-SAVE in DB (sofort, nicht erst beim Speichern-Button) ---
+            try:
+                enrichment_db.save(name, firma, result, metadata={
+                    "title": titel,
+                    "location": ort,
+                    "llm_provider": engine.llm_provider,
+                    "search_depth": max_searches,
+                    "duration_seconds": duration,
+                })
+            except Exception as db_err:
+                print(f"[DB SAVE] Warnung: {db_err}")
 
             email_info = result.get("email", "-") or "-"
             phone_info = result.get("personal_phone", "-") or "-"
@@ -150,18 +316,24 @@ def run_enrichment(df, engine, max_searches, skip_enriched, progress_bar, status
                     f"✅ **{name}** — "
                     f"E-Mail: `{email_info}` | "
                     f"Tel: `{phone_info}` | "
-                    f"Status: {result.get('email_status', '-')}"
+                    f"Status: {result.get('email_status', '-')} | "
+                    f"⏱️ {duration}s · 💾 gespeichert"
                 )
 
         except Exception as e:
             errors += 1
-            results[idx] = {"error": str(e)}
+            # Generische Fehlermeldung im UI — keine API-Interna leaken
+            err_type = type(e).__name__
+            safe_msg = _sanitize_error(str(e))
+            results[idx] = {"error": f"{err_type}: {safe_msg}"}
             with status_container:
-                st.markdown(f"❌ **{name}** — Fehler: {e}")
+                st.markdown(f"❌ **{name}** — Fehler beim Anreichern ({err_type})")
+            # Voller Stacktrace nur in Server-Logs
+            print(f"[ENRICH ERROR] {name}: {e}")
 
         progress_bar.progress((step + 1) / total)
 
-    return results, skipped, errors
+    return results, skipped, errors, from_cache
 
 
 def save_enriched_excel(df, results, output_path):
@@ -215,10 +387,12 @@ def save_enriched_excel(df, results, output_path):
     wb = openpyxl.load_workbook(output_path)
     ws = wb.active
 
-    header_font = Font(bold=True, color="FFFFFF", size=11)
-    header_fill = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
-    new_col_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    enriched_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+    # CI-Farben: Deep Purple #370C7B, Gold #FCB02F, Charcoal #2D2D2D
+    header_font = Font(bold=True, color="FFFFFF", size=11, name="Arial")
+    header_fill = PatternFill(start_color="370C7B", end_color="370C7B", fill_type="solid")
+    new_col_fill = PatternFill(start_color="FCB02F", end_color="FCB02F", fill_type="solid")
+    new_col_font = Font(bold=True, color="2D2D2D", size=11, name="Arial")
+    enriched_fill = PatternFill(start_color="F3EEFB", end_color="F3EEFB", fill_type="solid")  # helles Purple
     error_fill = PatternFill(start_color="FCE4EC", end_color="FCE4EC", fill_type="solid")
     thin_border = Border(
         left=Side(style="thin"), right=Side(style="thin"),
@@ -234,7 +408,11 @@ def save_enriched_excel(df, results, output_path):
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", wrap_text=True)
         cell.border = thin_border
-        cell.fill = header_fill if col_idx <= original_col_count else new_col_fill
+        if col_idx > original_col_count:
+            cell.fill = new_col_fill
+            cell.font = new_col_font
+        else:
+            cell.fill = header_fill
 
     # Datenzeilen formatieren
     for row_idx in range(2, ws.max_row + 1):
@@ -276,8 +454,46 @@ def save_enriched_excel(df, results, output_path):
 # UI
 # ============================================================
 
-st.title("🔍 Contact Data Enrichment")
-st.markdown("Lädt die Kontaktliste und reichert **automatisch alle Kontakte** an.")
+st.title("🧬 Contact Data Enrichment")
+st.markdown('<div class="ci-accent"></div>', unsafe_allow_html=True)
+st.markdown("**Selina Gaertner Consulting** — Lädt die Kontaktliste und reichert automatisch alle Kontakte an.")
+
+# --- DSGVO-Hinweis (einmaliges Akzeptieren pro Session) ---
+if "dsgvo_accepted" not in st.session_state:
+    st.session_state.dsgvo_accepted = False
+
+if not st.session_state.dsgvo_accepted:
+    with st.expander("⚖️ Datenschutzhinweis (DSGVO) — bitte vor Nutzung lesen", expanded=True):
+        st.markdown(f"""
+**Verarbeitung personenbezogener Daten**
+
+Diese App verarbeitet personenbezogene Daten (Namen, Firmen, Positionen, E-Mail-Adressen,
+Telefonnummern) zum Zweck der **Geschäftsanbahnung (Lead-Generierung im B2B-Kontext)**.
+
+**Was passiert mit den Daten:**
+- **Lokale Verarbeitung:** Excel-Datei wird lokal auf deinem Rechner verarbeitet
+- **API-Übertragung:** Name/Firma/Titel werden an Google Gemini und/oder Perplexity gesendet
+  (Recherche-Zweck), sowie an Hunter.io (Email-Recherche)
+- **Öffentliche Quellen:** Recherche erfolgt ausschließlich in öffentlich zugänglichen Quellen
+  (Google, Unternehmenswebseiten, Presse, LinkedIn-öffentliche Profile)
+- **Keine Speicherung bei Dritten:** Die APIs werden stateless genutzt — Daten werden nicht
+  dauerhaft bei den LLM-Anbietern gespeichert (siehe deren Datenschutzrichtlinien)
+
+**Deine Pflichten als Nutzerin/Nutzer (Art. 6 DSGVO):**
+- Berechtigtes Interesse (Art. 6 Abs. 1 lit. f) muss gegeben sein
+- Informationspflicht gegenüber dem Kontakt (Art. 14 DSGVO) bei erster Ansprache erfüllen
+- Widerspruchsrecht respektieren, Daten bei Widerspruch löschen
+- Angereicherte Daten **nur zweckgebunden** verwenden, nicht an Dritte weitergeben
+- Aufbewahrung begrenzen — Leads nach abgeschlossenem Prozess löschen
+
+**Verantwortlich:** Selina Gaertner Consulting · mail@selinagaertner.com
+        """)
+        dsgvo_col1, dsgvo_col2 = st.columns([1, 4])
+        if dsgvo_col1.button("✓ Verstanden & akzeptiert", type="primary"):
+            st.session_state.dsgvo_accepted = True
+            st.rerun()
+        dsgvo_col2.caption("Ohne Akzeptieren kann die App nicht genutzt werden.")
+    st.stop()
 
 # --- Sidebar ---
 st.sidebar.title("⚙️ Einstellungen")
@@ -285,11 +501,12 @@ st.sidebar.title("⚙️ Einstellungen")
 llm_choice = st.sidebar.radio(
     "🤖 KI-Modell",
     [
-        "🚀 Gemini 2.5 Flash — ~0,02 € / Kontakt",
+        "🚀 Gemini Deep Research (3-Stufen) — ~0,03 € / Kontakt",
         "🔬 Perplexity Deep Research — ~2–4 € / Kontakt",
     ],
     help=(
-        "Gemini 2.5 Flash: 5–10 Sek/Kontakt, beste DACH-Abdeckung via Google Search.\n\n"
+        "Gemini 3-Stufen: Plan → Search → Analyze. Flash entwirft gezielte Fragen, "
+        "recherchiert mit Google Grounding, analysiert alles. ~25 Sek/Kontakt.\n\n"
         "Perplexity Deep Research: 30–90 Sek/Kontakt, 30+ Suchläufe, tiefste Dossiers."
     ),
 )
@@ -335,10 +552,55 @@ skip_enriched = st.sidebar.checkbox(
 )
 
 st.sidebar.markdown("---")
+
+# Enrichment-DB Status + Export
+_db_count = enrichment_db.count()
+if _db_count > 0:
+    st.sidebar.success(f"💾 **Ergebnis-DB:** {_db_count} Kontakte gespeichert")
+    if st.sidebar.button("📥 Alle DB-Ergebnisse als Excel exportieren", key="export_db"):
+        _export_path = os.path.join(
+            DEFAULT_OUTPUT_DIR if os.path.isdir(DEFAULT_OUTPUT_DIR) else str(Path.home() / "Downloads"),
+            f"enrichment_db_export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+        )
+        try:
+            enrichment_db.export_excel(_export_path)
+            st.sidebar.success(f"✅ Exportiert: `{_export_path}`")
+        except Exception as ex:
+            st.sidebar.error(f"Export-Fehler: {_sanitize_error(str(ex))}")
+else:
+    st.sidebar.caption("💾 Ergebnis-DB: noch leer (wird beim ersten Enrichment befüllt)")
+
+st.sidebar.markdown("---")
 st.sidebar.markdown(
     f"**Geschätzte Zeit:** ~{max_searches * 5}s pro Kontakt\n\n"
     "DuckDuckGo hat Rate-Limits. Bei Fehlern: Suchtiefe reduzieren oder warten.\n\n"
     "**Hinweis:** Konstruierte E-Mails immer manuell prüfen!"
+)
+
+st.sidebar.markdown("---")
+
+# LeadGen-DB-Status anzeigen
+_leadgen_db = os.environ.get(
+    "LEADGEN_DB_PATH",
+    str(Path.home() / "Documents" / "AI Products I build" / "selina-ai-leadgen" / "data" / "automation.db"),
+)
+if os.path.exists(_leadgen_db):
+    try:
+        import sqlite3
+        _conn = sqlite3.connect(f"file:{_leadgen_db}?mode=ro", uri=True, timeout=2.0)
+        _count = _conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0]
+        _conn.close()
+        st.sidebar.success(f"🔗 **LeadGen-DB verbunden** · {_count} Kontakte werden abgeglichen")
+    except Exception:
+        st.sidebar.caption("🔗 LeadGen-DB gefunden, aber nicht lesbar")
+else:
+    st.sidebar.caption("⚪ Keine LeadGen-DB gefunden (kein Match-Check)")
+
+st.sidebar.markdown("---")
+st.sidebar.caption(
+    "⚖️ **DSGVO-Hinweis:** Nur zweckgebundene B2B-Anbahnung. "
+    "Informationspflicht (Art. 14) und Widerspruchsrecht respektieren. "
+    "Angereicherte Daten nicht weitergeben."
 )
 
 # --- File Input ---
@@ -353,16 +615,53 @@ input_mode = st.radio(
 file_path = None
 uploaded_df = None
 
+def _validate_and_load_excel(source, source_name: str):
+    """Lädt Excel mit Sicherheits-Checks: Size, Spaltenanzahl, Zeilenanzahl."""
+    try:
+        # Size-Check
+        if hasattr(source, "size"):
+            size_mb = source.size / (1024 * 1024)
+        elif isinstance(source, str) and os.path.exists(source):
+            size_mb = os.path.getsize(source) / (1024 * 1024)
+        else:
+            size_mb = 0
+
+        if size_mb > MAX_UPLOAD_SIZE_MB:
+            st.error(f"Datei zu groß ({size_mb:.1f} MB). Limit: {MAX_UPLOAD_SIZE_MB} MB.")
+            return None
+
+        # Excel laden
+        df = pd.read_excel(source, engine="openpyxl")
+
+        # Zeilen-Check
+        if len(df) > MAX_CONTACTS:
+            st.error(f"Zu viele Kontakte ({len(df)}). Limit: {MAX_CONTACTS}. Bitte Liste aufteilen.")
+            return None
+
+        # Plausibilitäts-Check: Muss mindestens eine Name-Spalte haben
+        if find_column(df, NAME_COLS) is None:
+            st.error("Keine 'Name'-Spalte gefunden. Erforderliche Spalten: Name, Firma, Titel.")
+            return None
+
+        return df
+    except Exception:
+        st.error(f"Datei konnte nicht geladen werden. Bitte prüfe das Excel-Format.")
+        return None
+
+
 if input_mode == "Standard-Pfad verwenden":
     file_path = st.text_input("Excel-Pfad", value=DEFAULT_EXCEL)
     if file_path and os.path.exists(file_path):
-        uploaded_df = pd.read_excel(file_path)
+        uploaded_df = _validate_and_load_excel(file_path, file_path)
     elif file_path:
         st.warning(f"Datei nicht gefunden: {file_path}")
 else:
-    uploaded_file = st.file_uploader("Excel-Datei (.xlsx)", type=["xlsx"])
+    uploaded_file = st.file_uploader(
+        f"Excel-Datei (.xlsx) — max {MAX_UPLOAD_SIZE_MB} MB, {MAX_CONTACTS} Kontakte",
+        type=["xlsx"],
+    )
     if uploaded_file:
-        uploaded_df = pd.read_excel(uploaded_file)
+        uploaded_df = _validate_and_load_excel(uploaded_file, uploaded_file.name)
         file_path = uploaded_file.name
 
 # --- Kontakte anzeigen + starten ---
@@ -377,9 +676,20 @@ if uploaded_df is not None:
 
     already_enriched = sum(1 for _, row in df.iterrows() if is_already_enriched(row))
 
-    col1, col2 = st.columns(2)
+    # DB-Cache-Status für alle Kontakte prüfen
+    _db_cache = {}
+    for i in range(len(df)):
+        _n = get_cell_value(df.iloc[i], name_col)
+        _f = get_cell_value(df.iloc[i], firma_col) if firma_col else ""
+        if _n:
+            cached = enrichment_db.lookup(_n, _f)
+            if cached and cached.get("zusammenfassung"):
+                _db_cache[i] = cached
+
+    col1, col2, col3 = st.columns(3)
     col1.metric("Kontakte gesamt", len(df))
-    col2.metric("Bereits angereichert", already_enriched)
+    col2.metric("In Ergebnis-DB", len(_db_cache))
+    col3.metric("Bereits in Excel", already_enriched)
 
     # --- Interaktive Auswahl-Tabelle ---
     st.markdown("### ✅ Kontakte auswählen")
@@ -410,8 +720,13 @@ if uploaded_df is not None:
     # Status-Spalte falls vorhanden
     if "Status" in df.columns:
         show_cols["Status"] = [str(df.iloc[i]["Status"]) for i in range(len(df))]
-    # Bereits angereichert markieren
-    show_cols["Angereichert"] = ["✅" if is_already_enriched(df.iloc[i]) else "" for i in range(len(df))]
+    # Bereits angereichert markieren (Excel)
+    show_cols["In Excel"] = ["✅" if is_already_enriched(df.iloc[i]) else "" for i in range(len(df))]
+    # DB-Cache-Status anzeigen
+    show_cols["In DB"] = [
+        f"💾 {_db_cache[i]['_age_label']}" if i in _db_cache else ""
+        for i in range(len(df))
+    ]
 
     selection_df = pd.DataFrame(show_cols)
 
@@ -423,7 +738,8 @@ if uploaded_df is not None:
             "Firma": st.column_config.TextColumn("Firma", width="medium"),
             "Titel": st.column_config.TextColumn("Titel", width="large"),
             "Status": st.column_config.TextColumn("Status", width="small"),
-            "Angereichert": st.column_config.TextColumn("✅", width="small"),
+            "In Excel": st.column_config.TextColumn("Excel", width="small"),
+            "In DB": st.column_config.TextColumn("DB-Cache", width="medium"),
         },
         hide_index=True,
         use_container_width=True,
@@ -459,31 +775,87 @@ if uploaded_df is not None:
         progress_bar = st.progress(0)
         status_container = st.container()
 
+        # Welche Kontakte sollen trotz Cache neu recherchiert werden?
+        force_rerun = {
+            i for i in selected_indices
+            if st.session_state.get(f"rerun_{i}", False)
+        }
+
         with st.spinner("Enrichment läuft..."):
-            results, skipped, errors = run_enrichment(
+            results, skipped, errors, from_cache = run_enrichment(
                 df, engine, max_searches, skip_enriched, progress_bar, status_container,
                 selected_indices=selected_indices,
+                force_rerun_indices=force_rerun,
             )
 
-        # --- Zusammenfassung ---
+        # Force-Rerun-Flags zurücksetzen
+        for i in force_rerun:
+            st.session_state.pop(f"rerun_{i}", None)
+
+        # --- Ergebnisse in Session State persistieren, damit Speichern-Button nach Rerun überlebt
+        st.session_state.enrichment_results = results
+        st.session_state.enrichment_skipped = skipped
+        st.session_state.enrichment_errors = errors
+        st.session_state.enrichment_from_cache = from_cache
+        st.session_state.enrichment_timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+
+    # --- Zusammenfassung + Speichern: läuft AUSSERHALB des Anreichern-Buttons,
+    # damit Speicher-Klicks einen Rerun überstehen
+    if "enrichment_results" in st.session_state and st.session_state.enrichment_results:
+        results = st.session_state.enrichment_results
+        skipped = st.session_state.enrichment_skipped
+        errors = st.session_state.enrichment_errors
+        from_cache = st.session_state.get("enrichment_from_cache", 0)
+
         st.markdown("---")
         st.subheader("📊 Zusammenfassung")
 
-        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-        res_col1.metric("Angereichert", len(results) - errors)
-        res_col2.metric("Übersprungen", skipped)
-        res_col3.metric("Fehler", errors)
-        res_col4.metric("Gesamt", len(df))
+        res_col1, res_col2, res_col3, res_col4, res_col5 = st.columns(5)
+        res_col1.metric("Neu recherchiert", len(results) - errors - from_cache)
+        res_col2.metric("Aus DB geladen", from_cache)
+        res_col3.metric("Übersprungen", skipped)
+        res_col4.metric("Fehler", errors)
+        res_col5.metric("Gesamt", len(df))
 
         # --- Detail-Ergebnisse ---
         if results:
+            # Übersicht: Anzahl LeadGen-Matches
+            leadgen_matches = sum(
+                1 for r in results.values()
+                if isinstance(r, dict) and r.get("leadgen_match", {}).get("matched")
+            )
+            if leadgen_matches > 0:
+                st.info(
+                    f"🔗 **{leadgen_matches} von {len(results)}** Kontakten sind in deiner "
+                    f"Lead-Gen-Historie — die Recherche berücksichtigt deren bisherigen Outbound-Verlauf."
+                )
+
             with st.expander("🔎 Detail-Ergebnisse", expanded=True):
                 for idx, result in results.items():
                     if "error" in result:
                         continue
                     row = df.iloc[idx]
                     name = get_cell_value(row, name_col)
-                    st.markdown(f"#### {name}")
+
+                    # LeadGen-Match-Badge direkt neben dem Namen
+                    lg = result.get("leadgen_match", {}) or {}
+                    if lg.get("matched"):
+                        status = lg.get("status", "")
+                        confidence = lg.get("confidence", "")
+                        st.markdown(f"#### {name} 🔗")
+                        badge_color = CI_PURPLE
+                        st.markdown(
+                            f'<div style="background:{CI_LIGHT_GREY}; border-left:4px solid {badge_color}; '
+                            f'padding:8px 12px; margin:4px 0 12px 0; border-radius:4px; font-family:Arial;">'
+                            f'<strong style="color:{badge_color};">Bekannt aus Outbound</strong> · '
+                            f'Status: <code>{status}</code> · Match-Konfidenz: {confidence}'
+                            f'{"<br/>LinkedIn: <a href=\"" + lg["linkedin_url"] + "\" target=\"_blank\">" + lg["linkedin_url"] + "</a>" if lg.get("linkedin_url") else ""}'
+                            f'{"<br/>Letzte Reply: <em>\"" + lg["reply_text"][:150] + "...\"</em>" if lg.get("reply_text") else ""}'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(f"#### {name}")
                     col_a, col_b = st.columns(2)
                     with col_a:
                         st.markdown(f"**E-Mail:** {result.get('email') or '-'}")
@@ -524,16 +896,34 @@ if uploaded_df is not None:
         # --- Export ---
         st.subheader("💾 Speichern")
 
-        output_name = f"kontakte_data_enriched_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        timestamp = st.session_state.get("enrichment_timestamp", datetime.now().strftime('%Y%m%d_%H%M'))
+        output_name = f"kontakte_data_enriched_{timestamp}.xlsx"
         output_dir = DEFAULT_OUTPUT_DIR if os.path.isdir(DEFAULT_OUTPUT_DIR) else str(Path.home() / "Downloads")
-        output_path = os.path.join(output_dir, output_name)
+        default_output_path = os.path.join(output_dir, output_name)
 
-        output_path = st.text_input("Speicherpfad", value=output_path)
+        output_path = st.text_input("Speicherpfad", value=default_output_path, key="save_path_input")
 
-        if st.button("💾 Excel speichern", type="primary"):
-            enriched_df = save_enriched_excel(df, results, output_path)
-            st.success(f"✅ Gespeichert: `{output_path}`")
-            st.balloons()
+        if st.button("💾 Excel speichern", type="primary", key="save_button"):
+            try:
+                enriched_df = save_enriched_excel(df, results, output_path)
+                st.success(f"✅ Gespeichert unter: `{output_path}`")
+                st.balloons()
+            except PermissionError:
+                st.error(
+                    f"❌ **Keine Schreibrechte** für diesen Pfad:\n`{output_path}`\n\n"
+                    "→ Bitte anderen Ordner wählen (z.B. `~/Documents/` oder `~/Downloads/`) "
+                    "oder prüfen, ob die Datei in Excel geöffnet ist."
+                )
+            except FileNotFoundError:
+                st.error(
+                    f"❌ **Ordner existiert nicht:** `{os.path.dirname(output_path)}`\n\n"
+                    "→ Bitte gültigen Pfad angeben."
+                )
+            except Exception as e:
+                err_type = type(e).__name__
+                safe_msg = _sanitize_error(str(e))
+                st.error(f"❌ **Fehler beim Speichern ({err_type}):** {safe_msg}")
+                print(f"[SAVE ERROR] {output_path}: {e}")
 
         # Download-Button
         buffer = BytesIO()
@@ -584,3 +974,12 @@ else:
        - 🎂 Geburtstag und relevante Infos für die Ansprache
     4. **Ergebnis** — Neue Excel-Datei mit allen Enrichment-Spalten
     """)
+
+# --- CI Footer ---
+st.markdown(
+    '<div class="ci-footer">'
+    'Selina Gaertner Consulting · AI Strategy & Governance for Life Sciences & MedTech<br>'
+    'selinagaertner.com · mail@selinagaertner.com'
+    '</div>',
+    unsafe_allow_html=True,
+)
