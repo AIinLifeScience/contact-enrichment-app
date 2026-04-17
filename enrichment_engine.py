@@ -501,27 +501,31 @@ PERSON:
 KONTEXT: Selina Gärtner ist KI-Strategieberaterin für Life Science & MedTech.
 Sie will diese Person als potenziellen Kunden ansprechen.
 
+⚡ FOKUS AUF AKTUALITÄT: Suche gezielt nach den NEUESTEN Informationen (letzte 4 Wochen
+bevorzugt, letzte 3 Monate mindestens). Neue Infos sind für die Ansprache VIEL wertvoller
+als alte. Bei jeder Frage: explizit nach aktuellen Daten fragen (2026, "kürzlich", "letzte Wochen").
+
 ERSTELLE Recherche-Fragen zu diesen Kategorien (mindestens 1 Frage pro Kategorie,
 bei LinkedIn und KI/Digital jeweils 2-3 Fragen):
 
 1. Person & Karriere (aktueller Job, Werdegang, Ausbildung, Expertise)
-2. Firma (Produkte, Größe, Marktposition, Funding, aktuelle News)
+2. Firma (Produkte, Größe, Marktposition, Funding, aktuelle News der letzten Wochen!)
 3. KI & Digitalisierung (nutzt die Firma KI? Gibt es eine Digital-Strategie? EU AI Act betroffen?)
 
 4. **LinkedIn-Tiefe** (HOCHRELEVANT für Personalisierung — mindestens 3 Fragen hier!):
-   - Welche LinkedIn-Posts hat {safe_name} in 2025/2026 veröffentlicht?
+   - Welche LinkedIn-Posts hat {safe_name} in den LETZTEN WOCHEN veröffentlicht?
      Was waren die Themen? Welche Haltung zu KI/Digital?
-   - Welche LinkedIn-Artikel/Pulse-Beiträge hat {safe_name} geschrieben?
+   - Welche LinkedIn-Artikel/Pulse-Beiträge hat {safe_name} KÜRZLICH geschrieben?
    - Welche Posts kommentiert oder teilt {safe_name} typischerweise?
      (gibt Aufschluss über Interessen und Netzwerk)
    - Welche LinkedIn-Gruppen oder Communities ist {safe_name} Mitglied?
    - Hat {safe_name} "Open to Work", "Hiring" oder andere LinkedIn-Signale gesetzt?
    - Welche gemeinsamen Themen-Hashtags nutzt {safe_name} auf LinkedIn?
 
-5. Konferenzen & Medien (Speaker-Auftritte 2025/2026, Podcasts, YouTube, Publikationen)
+5. Konferenzen & Medien (Speaker-Auftritte 2026, BEVORSTEHENDE Events, NEUE Podcasts/YouTube, aktuelle Publikationen)
 6. Persönliches (Interessen, Ehrenämter, sichtbare gemeinsame Kontakte mit Selina Gärtner)
-7. Timing-Signale (Jobwechsel, neues Funding, Stellenanzeigen für Digital/KI-Rollen,
-   Unternehmens-Restrukturierung, Pressemitteilungen der letzten 3 Monate)
+7. Timing-Signale (KÜRZLICHER Jobwechsel, neues Funding, Stellenanzeigen für Digital/KI-Rollen,
+   Unternehmens-Restrukturierung, Pressemitteilungen der letzten 4 Wochen!)
 
 REGELN:
 - Jede Frage muss den NAMEN oder die FIRMA der Person enthalten
@@ -1602,43 +1606,173 @@ FORMAT: Beantworte jede Frage mit einer nummerierten Antwort. Sei ausführlich u
             print(f"  [Fallback] KI-Zusammenfassung aus Basis-Daten generiert")
 
         # 2. Personalisierte Nachricht — immer eine sendbare Nachricht
+        #    Hyper-Personalisierung: Priorität auf konkrete Aktivitäten (Podcast, Konferenz, Post)
         if not findings["personalisierte_nachricht"].strip():
             german_indicators = ["deutsch", "dach", "germany", "austria", "swiss",
                                  "münchen", "berlin", "hamburg", "köln", "de"]
             is_de = any(ind in (location or "").lower() for ind in german_indicators)
+            first_name = name.split()[0]
+
+            # Besten Bezugspunkt finden (AKTUALITÄT > Kategorie)
+            konf = findings.get("conferences", "")
+            pods = findings.get("podcasts_videos", "")
+            linkedin_act = findings.get("linkedin_activity", "")
+            news = findings.get("job_changes", "")
+            bezug = None
+            bezug_type = ""
+
+            # Aktualitäts-Check: Enthält der Text Hinweise auf kürzliche Daten?
+            import re as _re
+            _recent_patterns = [
+                r"2026", r"april\s*202[56]", r"märz\s*202[56]", r"march\s*202[56]",
+                r"letzte[nr]?\s*woche", r"last\s*week", r"kürzlich", r"recently",
+                r"gestern", r"yesterday", r"diese[nr]?\s*monat", r"this\s*month",
+                r"vor\s*\d+\s*tage?n?", r"\d+\s*days?\s*ago", r"neu(?:e[sr]?)?(?:\s|$)",
+                r"bevorstehend", r"upcoming", r"angekündigt", r"announced",
+            ]
+            def _is_recent(text):
+                """Prüft ob ein Text Hinweise auf aktuelle Infos enthält."""
+                if not text:
+                    return False
+                t = text.lower()
+                return any(_re.search(p, t) for p in _recent_patterns)
+
+            # Alle Kandidaten sammeln mit Aktualitäts-Score
+            candidates = []
+            if pods and pods != "Nicht gefunden":
+                pod_name = pods.split("→")[0].strip().split("\n")[0].strip()
+                candidates.append(("podcast", pod_name, _is_recent(pods), 1))
+            if konf and konf != "Nicht gefunden":
+                konf_name = konf.split("→")[0].strip().split("\n")[0].strip()
+                candidates.append(("konferenz", konf_name, _is_recent(konf), 2))
+            if linkedin_act and linkedin_act != "Nicht gefunden" and "Profil:" not in linkedin_act:
+                li_topic = linkedin_act.split("→")[0].strip().split("\n")[0].strip()
+                candidates.append(("linkedin", li_topic, _is_recent(linkedin_act), 3))
+            if news and news != "Nicht gefunden":
+                news_topic = news.split("→")[0].strip().split("\n")[0].strip()
+                candidates.append(("news", news_topic, _is_recent(news), 4))
+
+            if candidates:
+                # Sortieren: Aktuelle zuerst, dann nach Kategorie-Prio
+                candidates.sort(key=lambda c: (not c[2], c[3]))
+                bezug_type = candidates[0][0]
+                bezug = candidates[0][1]
+                if candidates[0][2]:
+                    print(f"  [Personalisierung] ⚡ Aktuelle Info gefunden: {bezug_type} → {bezug[:60]}")
+
             if lg.get("matched") and lg.get("reply_text"):
                 # Bekannter Kontakt mit Reply → Follow-up
                 if is_de:
                     findings["personalisierte_nachricht"] = (
-                        f"Hallo {name.split()[0]},\n\n"
+                        f"Hallo {first_name},\n\n"
                         f"danke für die Rückmeldung! Wie sieht es aktuell bei {company} "
                         f"mit dem Thema KI-Strategie aus — hat sich seit unserem letzten "
                         f"Austausch etwas getan?\n\n"
-                        f"Herzliche Grüße, Selina"
+                        f"Herzliche Grüße, Selina\n\n"
+                        f"[Bezug: Follow-up auf vorherige Antwort]"
                     )
                 else:
                     findings["personalisierte_nachricht"] = (
-                        f"Hi {name.split()[0]},\n\n"
+                        f"Hi {first_name},\n\n"
                         f"Thanks for getting back! How are things at {company} regarding "
                         f"AI strategy — has anything changed since we last connected?\n\n"
-                        f"Best wishes, Selina"
+                        f"Best wishes, Selina\n\n"
+                        f"[Bezug: Follow-up on previous reply]"
+                    )
+            elif bezug and bezug_type == "podcast":
+                if is_de:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hallo {first_name},\n\n"
+                        f"ich habe Ihren Auftritt bei \"{bezug}\" gehört — besonders Ihre "
+                        f"Perspektive auf die Herausforderungen in der Branche fand ich spannend. "
+                        f"Wie stehen Sie aktuell zum Thema KI in diesem Kontext?\n\n"
+                        f"Herzliche Grüße, Selina\n\n"
+                        f"[Bezug: Podcast \"{bezug}\"]"
+                    )
+                else:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hi {first_name},\n\n"
+                        f"I listened to your appearance on \"{bezug}\" — your perspective on "
+                        f"the industry challenges really resonated. How are you currently "
+                        f"thinking about AI in that context?\n\n"
+                        f"Best wishes, Selina\n\n"
+                        f"[Bezug: Podcast \"{bezug}\"]"
+                    )
+            elif bezug and bezug_type == "konferenz":
+                if is_de:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hallo {first_name},\n\n"
+                        f"ich habe gesehen, dass Sie bei \"{bezug}\" dabei waren/sein werden. "
+                        f"Das Themenfeld ist auch genau mein Fokus — KI-Strategie für "
+                        f"Life Science & MedTech. Wie gehen Sie bei {company} das Thema an?\n\n"
+                        f"Herzliche Grüße, Selina\n\n"
+                        f"[Bezug: Konferenz \"{bezug}\"]"
+                    )
+                else:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hi {first_name},\n\n"
+                        f"I noticed you attended/will attend \"{bezug}\" — that's right in my "
+                        f"wheelhouse as well. I focus on AI strategy for Life Science & MedTech. "
+                        f"How is {company} approaching AI?\n\n"
+                        f"Best wishes, Selina\n\n"
+                        f"[Bezug: Conference \"{bezug}\"]"
+                    )
+            elif bezug and bezug_type == "linkedin":
+                if is_de:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hallo {first_name},\n\n"
+                        f"Ihr LinkedIn-Beitrag zu \"{bezug[:80]}\" hat mich angesprochen. "
+                        f"Genau diese Themen sehe ich auch bei meiner Arbeit im Bereich "
+                        f"KI-Strategie für Life Science. Wie priorisiert {company} das Thema KI?\n\n"
+                        f"Herzliche Grüße, Selina\n\n"
+                        f"[Bezug: LinkedIn-Post \"{bezug[:60]}\"]"
+                    )
+                else:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hi {first_name},\n\n"
+                        f"Your LinkedIn post on \"{bezug[:80]}\" caught my attention — I work "
+                        f"on exactly these topics in AI strategy for Life Science & MedTech. "
+                        f"How is {company} thinking about AI right now?\n\n"
+                        f"Best wishes, Selina\n\n"
+                        f"[Bezug: LinkedIn post \"{bezug[:60]}\"]"
+                    )
+            elif bezug and bezug_type == "news":
+                if is_de:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hallo {first_name},\n\n"
+                        f"ich habe gelesen, dass sich bei {company} gerade einiges tut — "
+                        f"\"{bezug[:80]}\". Spannende Entwicklung! Wie wirkt sich das auf "
+                        f"Ihre KI-Strategie aus?\n\n"
+                        f"Herzliche Grüße, Selina\n\n"
+                        f"[Bezug: News \"{bezug[:60]}\"]"
+                    )
+                else:
+                    findings["personalisierte_nachricht"] = (
+                        f"Hi {first_name},\n\n"
+                        f"I saw that {company} is making moves — \"{bezug[:80]}\". "
+                        f"Exciting development! How is this shaping your AI strategy?\n\n"
+                        f"Best wishes, Selina\n\n"
+                        f"[Bezug: News \"{bezug[:60]}\"]"
                     )
             elif is_de:
                 findings["personalisierte_nachricht"] = (
-                    f"Hallo {name.split()[0]},\n\n"
-                    f"ich beschäftige mich intensiv mit KI-Strategie in Life Science & MedTech "
-                    f"und bin auf {company} aufmerksam geworden. Mich würde interessieren: "
-                    f"Wie geht ihr bei {company} aktuell das Thema KI an?\n\n"
-                    f"Herzliche Grüße, Selina"
+                    f"Hallo {first_name},\n\n"
+                    f"als {title} bei {company} kennen Sie die Herausforderungen in "
+                    f"Life Science & MedTech aus erster Hand. Mich würde interessieren: "
+                    f"Wie geht {company} aktuell das Thema KI an?\n\n"
+                    f"Herzliche Grüße, Selina\n\n"
+                    f"[Bezug: Rolle + Firma (kein spezifischer Auftritt gefunden)]"
                 )
             else:
                 findings["personalisierte_nachricht"] = (
-                    f"Hi {name.split()[0]},\n\n"
-                    f"I focus on AI strategy for Life Science & MedTech and came across {company}. "
-                    f"I'd be curious to know: how is {company} currently approaching AI?\n\n"
-                    f"Best wishes, Selina"
+                    f"Hi {first_name},\n\n"
+                    f"As {title} at {company}, you're navigating the challenges in "
+                    f"Life Science & MedTech firsthand. I'd be curious to know: "
+                    f"how is {company} currently approaching AI?\n\n"
+                    f"Best wishes, Selina\n\n"
+                    f"[Bezug: Role + company (no specific activity found)]"
                 )
-            print(f"  [Fallback] Personalisierte Nachricht generiert")
+            print(f"  [Fallback] Personalisierte Nachricht generiert (Bezug: {bezug_type or 'Firma/Rolle'})")
 
         # 3. Kanal-Empfehlung — immer eine Empfehlung
         if not findings["kanal_empfehlung"].strip():
@@ -1813,10 +1947,51 @@ DEEP RESEARCH DOSSIER — AUFGABEN:
 2. **PERSONALISIERTE NACHRICHT** (fertig zum Kopieren & Absenden):
    Schreibe eine KURZE Nachricht. Selina soll sie 1:1 senden können.
 
+   ═══ HYPER-PERSONALISIERUNG — PRIORITÄTS-HIERARCHIE ═══
+
+   Wähle den BESTEN verfügbaren Bezugspunkt für den Einstieg.
+
+   ⚡ OBERSTES PRINZIP: AKTUALITÄT SCHLÄGT KATEGORIE ⚡
+   Eine NEUE Information (letzte 4 Wochen) hat IMMER Vorrang vor einer älteren —
+   egal aus welcher Kategorie. Ein LinkedIn-Post von gestern schlägt eine
+   Konferenz von vor 3 Monaten. Eine News von letzter Woche schlägt einen
+   Podcast von vor 6 Monaten. Wenn beim Re-Run NEUE Infos gefunden werden,
+   MUSS die Nachricht sich auf die neue Info beziehen, nicht auf alte Daten.
+
+   Bei GLEICHER Aktualität gilt diese Reihenfolge:
+
+   PRIO 1 (GOLD — wenn vorhanden, IMMER verwenden):
+   🎤 Podcast/Video-Auftritt: "Ich habe Ihren Auftritt im [Podcast-Name] gehört/gesehen —
+      besonders [konkretes Zitat/Thema] fand ich spannend..."
+   🎪 Konferenz (letzte 3 Monate ODER bevorstehend): "Ich habe gesehen, dass Sie beim
+      [Event-Name] zu [Thema] gesprochen haben / sprechen werden..."
+   📝 LinkedIn-Post (konkreter Post): "Ihr Post zu [Thema] hat mich zum Nachdenken gebracht —
+      besonders der Punkt über [Detail]..."
+
+   PRIO 2 (SILBER — wenn kein Gold verfügbar):
+   📰 Pressemitteilung/News: "Die [Partnerschaft/Launch/Funding] von [Firma] zeigt, dass..."
+   💼 Kürzlicher Jobwechsel: "Gratulation zur neuen Rolle als [Titel] bei [Firma]..."
+   📄 Publikation/Paper: "Ihre Arbeit zu [Thema] in [Journal] fand ich sehr relevant..."
+
+   PRIO 3 (BRONZE — nur als letzter Fallback):
+   🏢 Firma + Branche + Rolle: "Als [Titel] bei [Firma] kennen Sie sicher die
+      Herausforderung mit [branchenspezifisches KI-Thema]..."
+
+   ═══ WICHTIG ═══
+   - AKTUALITÄT geht vor! Wenn du bei einem erneuten Scan NEUE Infos findest
+     (neuer Post, neue Konferenz-Ankündigung, neue News), beziehe dich IMMER
+     auf die neueste Information — auch wenn du vorher andere Daten hattest.
+   - Die Nachricht MUSS sich auf den gewählten Bezugspunkt beziehen — KEIN generischer
+     Einstieg wie "ich bin auf Ihr Profil aufmerksam geworden"
+   - Nenne den KONKRETEN Namen des Podcasts, der Konferenz, des Posts oder der News
+   - Nenne wenn möglich das DATUM der Info (z.B. "Ihr Post von letzter Woche zu...")
+   - Der Leser muss denken: "Die hat sich wirklich mit mir beschäftigt"
+   - Am Ende des JSON-Feldes: In eckigen Klammern den Bezugspunkt-Typ + Datum angeben,
+     z.B. [Bezug: Podcast "AI in Pharma" Ep. 42, März 2026] oder [Bezug: LinkedIn-Post 14.04.2026]
+
    REGELN:
    - Sprache: {sprache}
    - KURZ: Max 3-4 Sätze für LinkedIn / max 5-6 Sätze für Email
-   - Beziehe dich auf genau 1 konkreten, recherchierten Fakt
    - Natürlich, auf Augenhöhe — kein Pitch, keine Floskeln
    - KEIN "Ich bin beeindruckt" oder "Ich würde mich freuen"
    - KEINE Links (Scorecard/Calendly) in der ersten Nachricht

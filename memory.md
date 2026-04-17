@@ -81,12 +81,27 @@ SQLite-Datenbank zum automatischen Speichern aller Enrichment-Ergebnisse:
 - **Override:** ENV `ENRICHMENT_DB_PATH`
 - **.gitignore:** `data/` und `*.db` sind ausgeschlossen (PII!)
 - **Tabelle:** `enrichment_results` mit 29 Spalten (alle Result-Felder + Metadata)
-- **Unique Index:** `(name COLLATE NOCASE, company COLLATE NOCASE)` → kein Duplicate, Update bei Re-Run
+- **Unique Index:** `(name COLLATE NOCASE, company COLLATE NOCASE)` → kein Duplicate, Merge bei Re-Run
+- **Merge statt Überschreiben (Apr 2026):**
+  - **MERGE_FIELDS** (Konferenzen, Podcasts, LinkedIn, Jobwechsel, relevante Infos, Monitoring-Tags, raw_findings): Neue Infos werden **angehängt** mit Datum-Tag `[Neu DD.MM.YYYY]`, Duplikate werden erkannt (exakt + Substring)
+  - **OVERWRITE_FIELDS** (Email, Zusammenfassung, Nachricht, Kanal-Empfehlung): Immer neueste Version
+  - **Sources**: JSON-Liste wird gemergt (neue URLs hinzugefügt, keine Duplikate)
+  - **Hilfsfunktion:** `_merge_text_field()` — Splittet Einträge, normalisiert, Duplikat-Check, Datum-Tag
 
 ## Sicherheits-Limits (konfigurierbar via .env)
 - `MAX_UPLOAD_SIZE_MB = 10`
 - `MAX_CONTACTS = 500`
 - `DEFAULT_EXCEL_PATH` / `DEFAULT_OUTPUT_DIR` aus ENV statt hardcoded
+
+## Hyper-Personalisierung (Apr 2026)
+Personalisierte Nachrichten nutzen jetzt eine **Prioritäts-Hierarchie** statt generischer Ansprache:
+- **OBERSTES PRINZIP: AKTUALITÄT > KATEGORIE** — Ein frischer LinkedIn-Post von gestern schlägt eine Konferenz von vor 3 Monaten
+- **Aktualitäts-Erkennung** im Code: Regex-basiert (Datumsmuster wie "2026", "letzte Woche", "kürzlich", "bevorstehend" etc.)
+- Bei gleicher Aktualität: PRIO 1 (GOLD): Podcast → Konferenz → LinkedIn-Post → PRIO 2 (SILBER): News/Jobwechsel → PRIO 3 (BRONZE): Rolle+Firma
+- **Research-Planer** sucht explizit nach neuesten Infos ("letzte Wochen", "kürzlich", "bevorstehende Events")
+- **Dual-Layer:** LLM-Prompt enthält Aktualitäts-Anweisung + Code-Fallback sortiert Kandidaten nach `(is_recent, category_prio)`
+- **[Bezug: podcast/konferenz/linkedin/news/rolle + Datum]-Tags** in Nachrichten für Nachvollziehbarkeit
+- **Sprachspezifisch:** DE- und EN-Templates je nach Bezug-Typ (inkl. neuer News-Typ)
 
 ## Offene To-Dos vor Push
 - **API-Keys rotieren** (waren in Konversation sichtbar): Google AI Studio, Anthropic, Hunter.io

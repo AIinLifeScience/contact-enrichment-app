@@ -4,12 +4,14 @@ Enrichment Results Database
 SQLite-Datenbank zum automatischen Speichern aller Enrichment-Ergebnisse.
 - Auto-Save nach jedem Kontakt (kein Datenverlust mehr)
 - Cache-Lookup: Bereits recherchierte Kontakte werden sofort angezeigt
+- Merge-Logik: Neue Infos werden ergänzt, nie überschrieben
 - Delta-Scan-ready: raw_findings + monitoring_tags für zukünftige Scans
 - Export: Alle Ergebnisse als formatierte Excel-Datei
 """
 
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -30,6 +32,79 @@ RESULT_FIELDS = [
 
 # Felder die als JSON gespeichert werden (Listen/Dicts)
 JSON_FIELDS = {"sources", "leadgen_match"}
+
+# Felder die bei Re-Run gemergt (ergänzt) statt überschrieben werden
+# → Textfelder wo neue Infos zu alten hinzukommen sollen
+MERGE_FIELDS = {
+    "conferences", "podcasts_videos", "job_changes",
+    "linkedin_activity", "relevant_info", "monitoring_tags",
+    "raw_findings",
+}
+
+# Felder die bei Re-Run IMMER überschrieben werden (neueste Version gewinnt)
+# → Email, Telefon, Zusammenfassung, Nachricht = immer aktuellste Version
+OVERWRITE_FIELDS = {
+    "email", "email_status", "email_verifizierung",
+    "referenz_email", "referenz_email_quelle",
+    "personal_phone", "company_phone", "birthday",
+    "zusammenfassung", "personalisierte_nachricht", "kanal_empfehlung",
+}
+
+
+def _merge_text_field(old_value: str, new_value: str) -> str:
+    """Mergt zwei Textfelder: Ergänzt neue Infos, vermeidet Duplikate.
+
+    Strategie:
+    - Splittet beide Werte in einzelne Info-Einträge (getrennt durch Newline oder ' | ')
+    - Prüft für jeden neuen Eintrag ob er schon im alten vorkommt (fuzzy, 80% Overlap)
+    - Hängt nur wirklich neue Einträge an, mit Datum-Tag
+    """
+    if not new_value or new_value.strip() in ("", "Nicht gefunden", "-", "N/A"):
+        return old_value or ""
+    if not old_value or old_value.strip() in ("", "Nicht gefunden", "-", "N/A"):
+        return new_value
+
+    # Einträge extrahieren (getrennt durch Newline, ' | ', oder '; ')
+    def _split_entries(text):
+        entries = re.split(r'\n|(?:\s*\|\s*)| ;\s*', text.strip())
+        return [e.strip() for e in entries if e.strip()]
+
+    old_entries = _split_entries(old_value)
+    new_entries = _split_entries(new_value)
+
+    # Normalisierte Versionen für Duplikat-Check
+    def _normalize(text):
+        return re.sub(r'\s+', ' ', text.lower().strip())
+
+    old_normalized = {_normalize(e) for e in old_entries}
+
+    # Nur wirklich neue Einträge hinzufügen
+    added = []
+    for entry in new_entries:
+        norm = _normalize(entry)
+        # Fuzzy-Check: Ist >80% des Texts schon in einem alten Eintrag?
+        is_duplicate = False
+        for old_norm in old_normalized:
+            if norm == old_norm:
+                is_duplicate = True
+                break
+            # Substring-Check: Neuer Eintrag ist Teil eines alten (oder umgekehrt)
+            if len(norm) > 10 and (norm in old_norm or old_norm in norm):
+                is_duplicate = True
+                break
+        if not is_duplicate:
+            added.append(entry)
+
+    if not added:
+        return old_value  # Nichts Neues gefunden
+
+    # Datum-Tag für neue Einträge
+    date_tag = datetime.now().strftime("[Neu %d.%m.%Y]")
+
+    # Zusammenführen: Alte Einträge + neue mit Datum-Tag
+    merged = old_value.rstrip()
+    merged += f"\n{date_tag} " + " | ".join(added)
+    return merged
 
 
 class EnrichmentDB:
@@ -150,10 +225,13 @@ class EnrichmentDB:
 
     def save(self, name: str, company: str, result: dict,
              metadata: Optional[dict] = None) -> int:
-        """Speichert ein Enrichment-Ergebnis (INSERT OR REPLACE).
+        """Speichert ein Enrichment-Ergebnis — MERGE statt Überschreiben.
 
-        Bei bestehendem Eintrag (gleicher Name+Firma) wird überschrieben
-        und updated_at aktualisiert.
+        Bei bestehendem Eintrag (gleicher Name+Firma):
+        - MERGE_FIELDS (Konferenzen, Podcasts, LinkedIn etc.) werden ERGÄNZT
+        - OVERWRITE_FIELDS (Email, Zusammenfassung, Nachricht) werden aktualisiert
+        - created_at bleibt erhalten, updated_at wird aktualisiert
+        - Neue Infos bekommen ein Datum-Tag [Neu DD.MM.YYYY]
         """
         now = datetime.now().isoformat()
         meta = metadata or {}
@@ -168,73 +246,160 @@ class EnrichmentDB:
 
         conn = self._get_conn()
 
-        # Prüfen ob schon ein Eintrag existiert (für created_at)
+        # Prüfen ob schon ein Eintrag existiert
         existing = conn.execute(
-            """SELECT id, created_at FROM enrichment_results
+            """SELECT * FROM enrichment_results
                WHERE name = ? COLLATE NOCASE
                  AND company = ? COLLATE NOCASE""",
             (name.strip(), (company or "").strip()),
         ).fetchone()
 
-        created_at = existing["created_at"] if existing else now
+        if existing:
+            # --- MERGE-Modus: Bestehenden Eintrag ergänzen ---
+            old = dict(existing)
+            created_at = old["created_at"]
 
-        conn.execute("""
-            INSERT OR REPLACE INTO enrichment_results (
-                name, company, title, location,
-                email, email_status, email_verifizierung,
-                referenz_email, referenz_email_quelle,
-                personal_phone, company_phone,
-                conferences, podcasts_videos, job_changes,
-                linkedin_activity, birthday,
-                relevant_info, zusammenfassung,
-                personalisierte_nachricht, kanal_empfehlung,
-                monitoring_tags, raw_findings, sources, leadgen_match,
-                llm_provider, search_depth, duration_seconds,
-                created_at, updated_at
-            ) VALUES (
-                ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?,
-                ?, ?,
-                ?, ?, ?,
-                ?, ?,
-                ?, ?,
-                ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?
-            )
-        """, (
-            name.strip(), (company or "").strip(),
-            result.get("_title", meta.get("title", "")),
-            result.get("_location", meta.get("location", "")),
-            result.get("email", ""),
-            result.get("email_status", ""),
-            result.get("email_verifizierung", ""),
-            result.get("referenz_email", ""),
-            result.get("referenz_email_quelle", ""),
-            result.get("personal_phone", ""),
-            result.get("company_phone", ""),
-            result.get("conferences", ""),
-            result.get("podcasts_videos", ""),
-            result.get("job_changes", ""),
-            result.get("linkedin_activity", ""),
-            result.get("birthday", ""),
-            result.get("relevant_info", ""),
-            result.get("zusammenfassung", ""),
-            result.get("personalisierte_nachricht", ""),
-            result.get("kanal_empfehlung", ""),
-            result.get("monitoring_tags", ""),
-            result.get("raw_findings", ""),
-            sources,
-            leadgen,
-            meta.get("llm_provider", ""),
-            meta.get("search_depth", 6),
-            meta.get("duration_seconds", 0),
-            created_at,
-            now,
-        ))
-        rowid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            # Merge-Felder: Neue Infos an bestehende anhängen
+            merged = {}
+            for field in MERGE_FIELDS:
+                old_val = old.get(field, "") or ""
+                new_val = result.get(field, "") or ""
+                merged[field] = _merge_text_field(old_val, new_val)
+
+            # Sources mergen (JSON-Liste)
+            old_sources = old.get("sources", "[]")
+            if isinstance(old_sources, str):
+                try:
+                    old_sources = json.loads(old_sources)
+                except (json.JSONDecodeError, TypeError):
+                    old_sources = []
+            new_sources = result.get("sources", [])
+            if isinstance(new_sources, str):
+                try:
+                    new_sources = json.loads(new_sources)
+                except (json.JSONDecodeError, TypeError):
+                    new_sources = []
+            # Nur neue Sources hinzufügen
+            existing_urls = {s.get("url", s) if isinstance(s, dict) else s for s in old_sources}
+            for s in new_sources:
+                url = s.get("url", s) if isinstance(s, dict) else s
+                if url not in existing_urls:
+                    old_sources.append(s)
+            sources = json.dumps(old_sources, ensure_ascii=False)
+
+            conn.execute("""
+                UPDATE enrichment_results SET
+                    title = ?, location = ?,
+                    email = ?, email_status = ?, email_verifizierung = ?,
+                    referenz_email = ?, referenz_email_quelle = ?,
+                    personal_phone = ?, company_phone = ?,
+                    conferences = ?, podcasts_videos = ?, job_changes = ?,
+                    linkedin_activity = ?, birthday = ?,
+                    relevant_info = ?, zusammenfassung = ?,
+                    personalisierte_nachricht = ?, kanal_empfehlung = ?,
+                    monitoring_tags = ?, raw_findings = ?,
+                    sources = ?, leadgen_match = ?,
+                    llm_provider = ?, search_depth = ?, duration_seconds = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (
+                result.get("_title", meta.get("title", old.get("title", ""))),
+                result.get("_location", meta.get("location", old.get("location", ""))),
+                # Overwrite-Felder: Neuer Wert gewinnt (wenn nicht leer)
+                result.get("email", "") or old.get("email", ""),
+                result.get("email_status", "") or old.get("email_status", ""),
+                result.get("email_verifizierung", "") or old.get("email_verifizierung", ""),
+                result.get("referenz_email", "") or old.get("referenz_email", ""),
+                result.get("referenz_email_quelle", "") or old.get("referenz_email_quelle", ""),
+                result.get("personal_phone", "") or old.get("personal_phone", ""),
+                result.get("company_phone", "") or old.get("company_phone", ""),
+                # Merge-Felder: Ergänzt statt überschrieben
+                merged.get("conferences", ""),
+                merged.get("podcasts_videos", ""),
+                merged.get("job_changes", ""),
+                merged.get("linkedin_activity", ""),
+                result.get("birthday", "") or old.get("birthday", ""),
+                merged.get("relevant_info", ""),
+                # Zusammenfassung + Nachricht: Immer neueste Version
+                result.get("zusammenfassung", "") or old.get("zusammenfassung", ""),
+                result.get("personalisierte_nachricht", "") or old.get("personalisierte_nachricht", ""),
+                result.get("kanal_empfehlung", "") or old.get("kanal_empfehlung", ""),
+                merged.get("monitoring_tags", ""),
+                merged.get("raw_findings", ""),
+                sources,
+                leadgen,
+                meta.get("llm_provider", old.get("llm_provider", "")),
+                meta.get("search_depth", old.get("search_depth", 6)),
+                meta.get("duration_seconds", 0),
+                now,
+                old["id"],
+            ))
+            rowid = old["id"]
+            n_merged = sum(1 for f in MERGE_FIELDS
+                           if merged.get(f, "") != (old.get(f, "") or ""))
+            if n_merged:
+                print(f"  [DB MERGE] {name}: {n_merged} Felder ergänzt (nicht überschrieben)")
+        else:
+            # --- INSERT-Modus: Neuer Kontakt ---
+            created_at = now
+            conn.execute("""
+                INSERT INTO enrichment_results (
+                    name, company, title, location,
+                    email, email_status, email_verifizierung,
+                    referenz_email, referenz_email_quelle,
+                    personal_phone, company_phone,
+                    conferences, podcasts_videos, job_changes,
+                    linkedin_activity, birthday,
+                    relevant_info, zusammenfassung,
+                    personalisierte_nachricht, kanal_empfehlung,
+                    monitoring_tags, raw_findings, sources, leadgen_match,
+                    llm_provider, search_depth, duration_seconds,
+                    created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?,
+                    ?, ?,
+                    ?, ?, ?,
+                    ?, ?,
+                    ?, ?,
+                    ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?
+                )
+            """, (
+                name.strip(), (company or "").strip(),
+                result.get("_title", meta.get("title", "")),
+                result.get("_location", meta.get("location", "")),
+                result.get("email", ""),
+                result.get("email_status", ""),
+                result.get("email_verifizierung", ""),
+                result.get("referenz_email", ""),
+                result.get("referenz_email_quelle", ""),
+                result.get("personal_phone", ""),
+                result.get("company_phone", ""),
+                result.get("conferences", ""),
+                result.get("podcasts_videos", ""),
+                result.get("job_changes", ""),
+                result.get("linkedin_activity", ""),
+                result.get("birthday", ""),
+                result.get("relevant_info", ""),
+                result.get("zusammenfassung", ""),
+                result.get("personalisierte_nachricht", ""),
+                result.get("kanal_empfehlung", ""),
+                result.get("monitoring_tags", ""),
+                result.get("raw_findings", ""),
+                sources,
+                leadgen,
+                meta.get("llm_provider", ""),
+                meta.get("search_depth", 6),
+                meta.get("duration_seconds", 0),
+                created_at,
+                now,
+            ))
+            rowid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
         conn.commit()
         conn.close()
         return rowid
